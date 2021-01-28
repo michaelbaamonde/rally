@@ -23,6 +23,7 @@ import random
 import sys
 import time
 import types
+import uuid
 from collections import Counter, OrderedDict
 from copy import deepcopy
 from enum import Enum
@@ -1620,11 +1621,16 @@ class RawRequest(Runner):
             #counter-intuitive, but preserves prior behavior
             headers = None
 
-        await es.transport.perform_request(method=params.get("method", "GET"),
+        request_id = uuid.uuid4()
+        self.logger.info("REQUEST_LOG - request %s: %s", request_id, json.dumps(params.get("body")))
+
+        response = await es.transport.perform_request(method=params.get("method", "GET"),
                                            url=path,
                                            headers=headers,
                                            body=params.get("body"),
                                            params=request_params)
+
+        self.logger.info("REQUEST_LOG - response: %s %s", request_id, json.dumps(response))
 
     def __repr__(self, *args, **kwargs):
         return "raw-request"
