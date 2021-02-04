@@ -777,8 +777,10 @@ class Query(Runner):
         # Mandatory to ensure it is always provided. This is especially important when this runner is used in a
         # composite context where there is no actual parameter source and the entire request structure must be provided
         # by the composite's parameter source.
+        request_id = uuid.uuid4()
         index = mandatory(params, "index", self)
         body = mandatory(params, "body", self)
+        self.logger.info("REQUEST_LOG - request %s: %s", request_id, json.dumps(params.get("body")))
         doc_type = params.get("type")
         detailed_results = params.get("detailed-results", False)
         encoding_header = self._query_headers(params)
@@ -795,7 +797,7 @@ class Query(Runner):
         es.return_raw_response()
 
         r = await self._raw_search(es, doc_type, index, body, request_params, headers=headers)
-
+        self.logger.info("REQUEST_LOG - response: %s %s", request_id, json.dumps(r))
         if detailed_results:
             props = parse(r, ["hits.total", "hits.total.value", "hits.total.relation", "timed_out", "took"])
             hits_total = props.get("hits.total.value", props.get("hits.total", 0))
