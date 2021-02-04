@@ -797,7 +797,8 @@ class Query(Runner):
         es.return_raw_response()
 
         r = await self._raw_search(es, doc_type, index, body, request_params, headers=headers)
-        self.logger.info("REQUEST_LOG - response: %s %s", request_id, json.dumps(r))
+        if r:
+            self.logger.info("REQUEST_LOG - response: %s %s", request_id, json.dumps(json.loads(r.read())))
         if detailed_results:
             props = parse(r, ["hits.total", "hits.total.value", "hits.total.relation", "timed_out", "took"])
             hits_total = props.get("hits.total.value", props.get("hits.total", 0))
