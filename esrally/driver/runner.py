@@ -372,7 +372,11 @@ class AssertingRunner(Runner, Delegator):
         if AssertingRunner.assertions_enabled and "assertions" in params:
             if isinstance(return_value, dict):
                 for assertion in params["assertions"]:
-                    self.check_assertion(assertion, return_value)
+                    try:
+                        self.check_assertion(assertion, return_value)
+                    except exceptions.RallyTaskAssertionError as e:
+                        self.logger.info(f"Assertion failed on: {[params.get('name')]} - {[params.get('body')]}")
+                        raise e
             else:
                 self.logger.debug("Skipping assertion check as [%s] does not return a dict.", repr(self.delegate))
         return return_value
