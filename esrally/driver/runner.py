@@ -975,14 +975,14 @@ class Query(Runner):
             return await _search_after_query(es, params)
         elif search_method == "scroll-search":
             return await _scroll_query(es, params)
-        elif "pages" in params:
-            logging.getLogger(__name__).warning(
-                "Invoking a scroll search with the 'search' operation is deprecated "
-                "and will be removed in a future release. Use 'scroll-search' instead."
-            )
-            return await _scroll_query(es, params)
+        elif search_method == "search":
+            if "pages" in params:
+                raise exceptions.DataError("Invoking a scroll search with the 'search' operation is forbidden."
+                                           "Use the 'scroll-search' operation instead.")
+            else:
+                return await _request_body_query(es, params)
         else:
-            return await _request_body_query(es, params)
+            raise exceptions.RallyError("No runner available for operation type [%s]" % search_method)
 
     async def _raw_search(self, es, doc_type, index, body, params, headers=None):
         components = []

@@ -493,6 +493,7 @@ class CreateComponentTemplateParamSource(CreateTemplateParamSource):
 class SearchParamSource(ParamSource):
     def __init__(self, track, params, **kwargs):
         super().__init__(track, params, **kwargs)
+        operation_type = params.get("operation-type", None)
         target_name = get_target(track, params)
         type_name = params.get("type")
         if params.get("data-stream") and type_name:
@@ -514,7 +515,13 @@ class SearchParamSource(ParamSource):
             "request-params": request_params,
             "response-compression-enabled": response_compression_enabled,
             "body": query_body,
+            "operation-type": operation_type
         }
+
+        if not operation_type:
+            raise exceptions.InvalidSyntax(
+                f"'operation-type' is mandatory and is missing for operation '{kwargs.get('operation_name')}'"
+            )
 
         if not target_name:
             raise exceptions.InvalidSyntax(
@@ -781,7 +788,6 @@ class PartitionBulkIndexParamSource:
     @property
     def percent_completed(self):
         return self.current_bulk / self.total_bulks
-
 
 class OpenPointInTimeParamSource(ParamSource):
     def __init__(self, track, params, **kwargs):
@@ -1324,6 +1330,7 @@ class SourceOnlyIndexDataReader(IndexDataReader):
 
 register_param_source_for_operation(track.OperationType.Bulk, BulkIndexParamSource)
 register_param_source_for_operation(track.OperationType.Search, SearchParamSource)
+register_param_source_for_operation(track.OperationType.ScrollSearch, SearchParamSource)
 register_param_source_for_operation(track.OperationType.CreateIndex, CreateIndexParamSource)
 register_param_source_for_operation(track.OperationType.DeleteIndex, DeleteIndexParamSource)
 register_param_source_for_operation(track.OperationType.CreateDataStream, CreateDataStreamParamSource)

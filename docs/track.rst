@@ -968,7 +968,6 @@ Properties
 * ``body`` (mandatory): The query body.
 * ``response-compression-enabled`` (optional, defaults to ``true``): Allows to disable HTTP compression of responses. As these responses are sometimes large and decompression may be a bottleneck on the client, it is possible to turn off response compression.
 * ``detailed-results`` (optional, defaults to ``false``): Records more detailed meta-data about queries. As it analyzes the corresponding response in more detail, this might incur additional overhead which can skew measurement results. This flag is ineffective for scroll queries.
-* ``pages`` (optional): Number of pages to retrieve. If this parameter is present, a scroll query will be executed. If you want to retrieve all result pages, use the value "all".  See also the ``scroll-search`` operation type.
 * ``results-per-page`` (optional):  Number of documents to retrieve per page. This maps to the Search API's ``size`` parameter, and can be used for scroll and non-scroll searches. Defaults to ``10``
 
 Example::
@@ -987,9 +986,7 @@ Example::
       }
     }
 
-For scroll queries, throughput will be reported as number of retrieved pages per second (``pages/s``). The rationale is that each HTTP request corresponds to one operation and we need to issue one HTTP request per result page.
-
-For other queries, throughput will be reported as number of search requests per second (``ops/s``).
+Throughput will be reported as number of search requests per second (``ops/s``).
 
  Note that if you use a dedicated Elasticsearch metrics store, you can also use other request-level meta-data such as the number of hits for your own analyses.
 
@@ -997,6 +994,8 @@ Meta-data
 """""""""
 
 The following meta data are always returned:
+
+TODO: Hrm...
 
 * ``weight``: "weight" of an operation. Always 1 for regular queries and the number of retrieved pages for scroll queries.
 * ``unit``: The unit in which to interpret ``weight``. Always "ops" for regular queries and "pages" for scroll queries.
@@ -1006,8 +1005,8 @@ If ``detailed-results`` is ``true`` the following meta-data are returned in addi
 
 * ``hits``: Total number of hits for this query.
 * ``hits_relation``: whether ``hits`` is accurate (``eq``) or a lower bound of the actual hit count (``gte``).
-* ``timed_out``: Whether the query has timed out. For scroll queries, this flag is ``true`` if the flag was ``true`` for any of the queries issued.
-* ``took``: Value of the the ``took`` property in the query response. For scroll queries, this value is the sum of all ``took`` values in query responses.
+* ``timed_out``: Whether the query has timed out.
+* ``took``: Value of the the ``took`` property in the query response.
 
 paginated-search
 ~~~~~~~~~~~~~~~~
