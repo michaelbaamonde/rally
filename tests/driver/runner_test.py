@@ -1359,7 +1359,7 @@ class QueryRunnerTests(TestCase):
         }
         es.transport.perform_request.return_value = as_future(io.StringIO(json.dumps(search_response)))
 
-        query_runner = runner.Query()
+        query_runner = runner.Search()
 
         params = {
             "index": "_all",
@@ -1908,7 +1908,7 @@ class QueryRunnerTests(TestCase):
 
         es.clear_scroll.return_value = as_future(io.StringIO('{"acknowledged": true}'))
 
-        query_runner = runner.Query()
+        query_runner = runner.Scroll()
 
         params = {
             "pages": 2,

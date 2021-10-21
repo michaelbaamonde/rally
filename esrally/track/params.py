@@ -518,10 +518,10 @@ class SearchParamSource(ParamSource):
             "operation-type": operation_type
         }
 
-        if not operation_type:
-            raise exceptions.InvalidSyntax(
-                f"'operation-type' is mandatory and is missing for operation '{kwargs.get('operation_name')}'"
-            )
+        # if not operation_type:
+        #     raise exceptions.InvalidSyntax(
+        #         f"'operation-type' is mandatory and is missing for operation '{kwargs.get('operation_name')}'"
+        #     )
 
         if not target_name:
             raise exceptions.InvalidSyntax(
