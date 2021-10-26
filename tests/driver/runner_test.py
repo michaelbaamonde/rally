@@ -1362,6 +1362,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "search",
             "index": "_all",
             "detailed-results": True,
             "cache": True,
@@ -1407,6 +1408,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "search",
             "index": "_all",
             "detailed-results": True,
             "cache": True,
@@ -1457,6 +1459,7 @@ class QueryRunnerTests(TestCase):
 
         query_runner = runner.Query()
         params = {
+            "operation-type": "search",
             "index": "_all",
             "cache": False,
             "detailed-results": True,
@@ -1510,6 +1513,7 @@ class QueryRunnerTests(TestCase):
 
         query_runner = runner.Query()
         params = {
+            "operation-type": "search",
             "index": "_all",
             "body": None,
             "request-params": {"q": "user:kimchy"},
@@ -1557,6 +1561,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "search",
             "index": "_all",
             "cache": True,
             "detailed-results": True,
@@ -1611,6 +1616,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "search",
             "index": "unittest",
             "detailed-results": True,
             "response-compression-enabled": False,
@@ -1663,6 +1669,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "search",
             "index": "unittest",
             "type": "type",
             "detailed-results": True,
@@ -1717,6 +1724,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "pages": 1,
             "results-per-page": 100,
             "index": "unittest",
@@ -1777,6 +1785,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "pages": 1,
             "results-per-page": 100,
             "index": "unittest",
@@ -1832,6 +1841,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "index": "_all",
             "pages": 1,
             "results-per-page": 100,
@@ -1911,6 +1921,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "pages": 2,
             "results-per-page": 2,
             "index": "unittest",
@@ -1958,6 +1969,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "pages": 5,
             "results-per-page": 100,
             "index": "unittest",
@@ -2020,6 +2032,7 @@ class QueryRunnerTests(TestCase):
         query_runner = runner.Query()
 
         params = {
+            "operation-type": "scroll-search",
             "pages": "all",
             "results-per-page": 4,
             "index": "unittest",
