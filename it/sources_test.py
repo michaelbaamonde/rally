@@ -26,7 +26,7 @@ def test_sources(cfg):
         it.race(
             cfg,
             f"--revision=latest --track=geonames --test-mode  --target-hosts=127.0.0.1:{port} "
-            f"--challenge=append-no-conflicts --car=4gheap,basic-license --elasticsearch-plugins=analysis-icu",
+            f"--challenge=append-no-conflicts --car=4gheap,basic-license --elasticsearch-plugins=analysis-icu --runtime-jdk=bundled",
         )
         == 0
     )
@@ -36,7 +36,7 @@ def test_sources(cfg):
         it.race(
             cfg,
             f"--pipeline=from-sources --track=geonames --test-mode --target-hosts=127.0.0.1:{port} "
-            f'--challenge=append-no-conflicts-index-only --car="4gheap,basic-license,ea"',
+            f'--challenge=append-no-conflicts-index-only --car="4gheap,basic-license,ea" --runtime-jdk=bundled',
         )
         == 0
     )
