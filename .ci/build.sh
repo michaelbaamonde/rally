@@ -84,6 +84,44 @@ function archive {
   fi
 }
 
+function list_tracks {
+  esrally list tracks | tail -n+13 | awk $'{print $1}' | grep ^[a-z] | grep -v eql
+}
+
+function es_revision {
+  git -C ~/.rally/benchmarks/src/elasticsearch rev-parse HEAD
+}
+
+function track_revision {
+  git -C ~/.rally/benchmarks/tracks/default rev-parse HEAD
+}
+
+function test_all_tracks {
+  TRACKS=($(list_tracks))
+  FIRST_TRACK="${TRACKS[0]}"
+  REMAINING_TRACKS="${TRACKS[@]:1}"
+
+  # Run the first race
+  echo "esrally race --track="$FIRST_TRACK" --test-mode --kill-running-processes"
+  echo
+  esrally race --track="$FIRST_TRACK" --test-mode --kill-running-processes
+  echo
+
+  # Grab the ES and track revisions used by first race for consistency across subsequent races
+  ES_REVISION="$(es_revision)"
+  echo "ES revision: $ES_REVISION"
+
+  TRACK_REVISION="$(track_revision)"
+  echo "Track revision: $TRACK_REVISION"
+
+  for track in $REMAINING_TRACKS; do
+    echo "esrally race --track=$track --test-mode --kill-running-processes --revision=$ES_REVISION --track-revision=$TRACK_REVISION"
+    echo;
+    esrally race --track=$track --test-mode --kill-running-processes --revision=$ES_REVISION --track-revision=$TRACK_REVISION;
+    echo;
+  done
+}
+
 if declare -F "$1" > /dev/null; then
     $1
     exit
