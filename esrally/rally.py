@@ -667,7 +667,7 @@ def create_arg_parser():
         action="store_true",
         default=False,
     )
-    #Runs the given track with the experimental zeromq-based load driver (default: false).
+    # Runs the given track with the experimental zeromq-based load driver (default: false).
     race_parser.add_argument(
         "--zero-mode",
         help=argparse.SUPPRESS,
