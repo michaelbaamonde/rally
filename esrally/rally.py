@@ -46,6 +46,7 @@ from esrally import (
     telemetry,
     track,
     version,
+    zero,
 )
 from esrally.mechanic import mechanic, team
 from esrally.tracker import tracker
@@ -448,6 +449,13 @@ def create_arg_parser():
         action="store_true",
     )
 
+    zero_parser = subparsers.add_parser("zero", help="Experimental zmq-based load generator")
+    zero_parser.add_argument(
+        "--workers",
+        required=False,
+        help="List of worker IP addresses",
+    )
+
     for p in [list_parser, race_parser]:
         p.add_argument(
             "--distribution-version",
@@ -659,6 +667,13 @@ def create_arg_parser():
         action="store_true",
         default=False,
     )
+    #Runs the given track with the experimental zeromq-based load driver (default: false).
+    race_parser.add_argument(
+        "--zero-mode",
+        help=argparse.SUPPRESS,
+        default=False,
+        action="store_true",
+    )
 
     for p in [
         list_parser,
@@ -671,6 +686,7 @@ def create_arg_parser():
         info_parser,
         generate_parser,
         create_track_parser,
+        zero_parser,
     ]:
         # This option is needed to support a separate configuration for the integration tests on the same machine
         p.add_argument(
@@ -959,6 +975,7 @@ def dispatch_sub_command(arg_parser, args, cfg):
             cfg.add(config.Scope.applicationOverride, "driver", "assertions", args.enable_assertions)
             cfg.add(config.Scope.applicationOverride, "driver", "on.error", args.on_error)
             cfg.add(config.Scope.applicationOverride, "driver", "load_driver_hosts", opts.csv_to_list(args.load_driver_hosts))
+            cfg.add(config.Scope.applicationOverride, "driver", "zero.mode.enabled", args.zero_mode)
             cfg.add(config.Scope.applicationOverride, "track", "test.mode.enabled", args.test_mode)
             configure_track_params(arg_parser, args, cfg)
             configure_connection_params(arg_parser, args, cfg)
@@ -972,7 +989,10 @@ def dispatch_sub_command(arg_parser, args, cfg):
             cfg.add(config.Scope.applicationOverride, "mechanic", "skip.rest.api.check", convert.to_bool(args.skip_rest_api_check))
 
             configure_reporting_params(args, cfg)
-            race(cfg, args.kill_running_processes)
+            if cfg.opts("driver", "zero.mode.enabled"):
+                zero.drive(cfg)
+            else:
+                race(cfg, args.kill_running_processes)
         elif sub_command == "generate":
             cfg.add(config.Scope.applicationOverride, "generator", "chart.spec.path", args.chart_spec_path)
             cfg.add(config.Scope.applicationOverride, "generator", "chart.type", args.chart_type)
@@ -988,6 +1008,9 @@ def dispatch_sub_command(arg_parser, args, cfg):
         elif sub_command == "info":
             configure_track_params(arg_parser, args, cfg)
             track.track_info(cfg)
+        elif sub_command == "zero":
+            # configure_track_params(arg_parser, args, cfg)
+            zero.drive(cfg)
         else:
             raise exceptions.SystemSetupError(f"Unknown subcommand [{sub_command}]")
         return ExitStatus.SUCCESSFUL
