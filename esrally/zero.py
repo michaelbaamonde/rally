@@ -91,6 +91,7 @@ class TaskExecutor:
                 self.task_queue.task_done()
         return
 
+
 class Worker:
     """
     The actual worker that applies load against the cluster(s).
@@ -131,6 +132,8 @@ class Worker:
         self.start_driving = False
         self.wakeup_interval = Worker.WAKEUP_INTERVAL_SECONDS
 
+        self.result_queue = None
+
     def start(self):
         self.logger.info("Worker[%d] is about to start.", self.worker_id)
         track.set_absolute_data_path(self.cfg, self.track)
@@ -147,8 +150,13 @@ class Worker:
                 break
             else:
                 step, tasks = msg
-                # TODO: Distinguish between JoinPoint and None
                 if not tasks:
+                    self.task_queue.task_done()
+                elif isinstance(tasks, JoinPoint):
+                    print(f"worker_{self.worker_id}: Reached join point at step {step}.")
+                    self.send_samples()
+                    self.cancel.clear()
+                    self.sampler = None
                     self.task_queue.task_done()
                 else:
                     print(f"worker_{self.worker_id}: Executing tasks: {tasks}")
@@ -157,112 +165,14 @@ class Worker:
                     task_queue.task_done()
         return
 
-    def drive(self):
-        task_allocations = self.current_tasks_and_advance()
-        # skip non-tasks in the task list
-        while len(task_allocations) == 0:
-            task_allocations = self.current_tasks_and_advance()
-
-        if self.at_joinpoint():
-            self.logger.info("Worker[%d] reached join point at index [%d].", self.worker_id, self.current_task_index)
-            # clients that don't execute tasks don't need to care about waiting
-            if self.executor_future is not None:
-                self.executor_future.result()
-            self.send_samples()
-            self.cancel.clear()
-            self.complete.clear()
-            self.executor_future = None
-            self.sampler = None
-            self.coordinator.joinpoint_reached(JoinPointReached(self.worker_id, task_allocations))
-        else:
-            # There may be a situation where there are more (parallel) tasks than workers. If we were asked to complete all tasks, we not
-            # only need to complete actively running tasks but actually all scheduled tasks until we reach the next join point.
-            if self.complete.is_set():
-                self.logger.info(
-                    "Worker[%d] skips tasks at index [%d] because it has been asked to complete all tasks until next join point.",
-                    self.worker_id,
-                    self.current_task_index,
-                )
-            else:
-                self.logger.info("Worker[%d] is executing tasks at index [%d].", self.worker_id, self.current_task_index)
-                self.sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=self.sample_queue_size)
-                executor = AsyncIoAdapter(
-                    self.cfg, self.track, task_allocations, self.sampler, self.cancel, self.complete, self.on_error
-                )
-
-                self.executor_future = self.pool.submit(executor)
-                time.sleep(datetime.timedelta(seconds=self.wakeup_interval))
-                if self.executor_future.done():
-                    print("Done")
-                    self.task_queue.task_done()
-
-
-    def wakeup_after(self, interval):
-        time.sleep(interval)
-
-        if self.start_driving:
-            self.start_driving = False
-            self.drive()
-        else:
-            current_samples = self.send_samples()
-            if self.cancel.is_set():
-                msg = f"Worker[{str(self.worker_id)}] has detected that benchmark has been cancelled. Notifying coordinator..."
-                self.logger.info(msg)
-                # TODO: better error handling
-                raise exceptions.RallyError(msg)
-            elif self.executor_future is not None and self.executor_future.done():
-                e = self.executor_future.exception(timeout=0)
-                if e:
-                    self.logger.exception(
-                        "Worker[%s] has detected a benchmark failure. Notifying master...", str(self.worker_id), exc_info=e
-                    )
-                    # the exception might be user-defined and not be on the load path of the master driver. Hence, it cannot be
-                    # deserialized on the receiver so we convert it here to a plain string.
-                    # TODO: Catch these upstream in the coordinator in single-node case. Figure out error handling in multi-node case.
-                    raise exceptions.RallyError(f"Error in load generator [{self.worker_id, str(e)}]")
-                else:
-                    self.logger.info("Worker[%s] is ready for the next task.", str(self.worker_id))
-                    self.executor_future = None
-                    self.drive()
-            else:
-                if current_samples and len(current_samples) > 0:
-                    most_recent_sample = current_samples[-1]
-                    if most_recent_sample.percent_completed is not None:
-                        self.logger.debug(
-                            "Worker[%s] is executing [%s] (%.2f%% complete).",
-                            str(self.worker_id),
-                            most_recent_sample.task,
-                            most_recent_sample.percent_completed * 100.0,
-                        )
-                    else:
-                        # TODO: This could be misleading given that one worker could execute more than one task...
-                        self.logger.debug(
-                            "Worker[%s] is executing [%s] (dependent eternal task).", str(self.worker_id), most_recent_sample.task
-                        )
-                else:
-                    self.logger.debug("Worker[%s] is executing (no samples).", str(self.worker_id))
-                self.wakeup_after(datetime.timedelta(seconds=self.wakeup_interval))
-
-
-    def drive_at(self, client_start_timestamp):
-        sleep_time = datetime.timedelta(seconds=client_start_timestamp - time.perf_counter())
-        self.logger.info(
-            "Worker[%d] is continuing its work at task index [%d] on [%f], that is in [%s].",
-            self.worker_id,
-            self.current_task_index,
-            client_start_timestamp,
-            sleep_time,
-        )
-        self.start_driving = True
-        self.wakeup_after(sleep_time)
-
     def send_samples(self):
         if self.sampler:
             samples = self.sampler.samples
-            if len(samples) > 0:
-                self.coordinator.update_samples(UpdateSamples(self.worker_id, samples))
+            self.result_queue.put(UpdateSamples(self.worker_id, samples))
             return samples
-        return None
+        else:
+            self.result_queue.put([None])
+
 
 class SingleNodeCoordinator:
     RESET_RELATIVE_TIME_MARKER = "reset_relative_time"
@@ -278,7 +188,14 @@ class SingleNodeCoordinator:
         self.cluster_details = {}
         self.cfg = cfg
         self.cores = num_cores(self.cfg)
-        self.driver = Driver(self, cfg)
+
+        self.manager = multiprocessing.Manager()
+        self.result_queue = self.manager.Queue()
+        self.raw_samples = []
+        self.most_recent_sample_per_client = {}
+        self.sample_post_processor = None
+
+        self.driver = Driver(self, cfg, self.raw_samples, self.most_recent_sample_per_client)
         self.client_allocations_per_worker = {}
 
         self.post_process_timer = 0
@@ -323,68 +240,80 @@ class SingleNodeCoordinator:
 
     def create_client(self, cfg, worker_id, track, client_allocations):
         worker = Worker(self, cfg, worker_id, track, client_allocations)
+        worker.result_queue = self.result_queue
         return worker
 
     def start_worker(self, worker_process):
         worker_process.start()
 
     def run(self):
-        def filter_noop_tasks(tasks):
-            return [task for task in tasks if isinstance(task, driver.driver.TaskAllocation)]
-
-        def filtered_allocations(allocations):
-            for a in allocations:
-                tasks = filter_noop_tasks(a["tasks"])
-                a.update({"tasks": tasks})
-            return allocations
-
         def worker_allocations(worker_id, allocations):
             return allocations[worker_id].allocations
 
         def create_worker_process(worker, task_queue):
             process_name = f"worker_{worker.worker_id}"
-            return multiprocessing.Process(name=process_name, target=worker.do_task, args=(task_queue, ))
+            return multiprocessing.Process(name=process_name, target=worker.do_task, args=(task_queue,))
 
-        def worker_context(worker, manager, allocations):
-            return {"worker": worker, "queue": manager.JoinableQueue(), "allocations": worker_allocations(worker.worker_id, allocations)}
+        def worker_context(worker, manager):
+            return {"worker": worker, "queue": manager.JoinableQueue()}
 
-        allocations = self.client_allocations_per_worker
-        manager = multiprocessing.Manager()
-        workers = {worker.worker_id: worker_context(worker, manager, allocations) for worker in self.driver.workers}
+        def run_task_loops(workers, allocations):
+            steps = self.driver.number_of_steps
 
-        processes = [create_worker_process(worker_context["worker"], worker_context["queue"]) for _, worker_context in workers.items()]
+            for step in range(steps):
+                queues = []
+                for worker, ctx in workers.items():
+                    task_queue = ctx["queue"]
+                    ta = allocations[worker]
+                    if ta.is_joinpoint(step):
+                        tasks = JoinPoint(step)
+                    else:
+                        tasks = ta.tasks(step)
+                    queues.append((worker, task_queue))
+                    print(f"coordinator: Queueing tasks for worker_{worker} at step {step} of {steps - 1}")
+                    task_queue.put((step, tasks))
+                print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
+                for worker, queue in queues:
+                    queue.join()
+                    print(f"coordinator: worker_{worker} at join point {step} of {steps - 1}")
+                print(f"coordinator: All workers at join point {step} of {steps - 1}")
+                print(f"coordinator: Postprocessing samples for step {step} of {steps - 1}")
+                raw_samples = self.update_samples()
+                print(f"coordinator: raw_samples = {raw_samples}")
+                if raw_samples is not None:
+                    self.sample_post_processor(raw_samples)
+                # sample_post_processor = multiprocessing.Process(name="sample_processor", target=self.driver.post_process_samples())
+                # sample_post_processor.start()
+                # sample_post_processor.join()
+                print(f"coordinator: Done postprocessing samples for step {step} of {steps - 1}")
+                # self.driver.update_progress_message(task_finished=True)
 
-        for p in processes:
-            p.start()
 
-        steps = self.driver.number_of_steps
-
-        for step in range(steps):
-            queues = []
+        def shutdown_workers(workers):
+            qs = []
+            print(f"coordinator: Telling all workers to shut down.")
             for worker, ctx in workers.items():
-                ta = allocations[worker]
-                if ta.is_joinpoint(step):
-                    tasks = []
-                else:
-                    tasks = ta.tasks(step)
                 task_queue = ctx["queue"]
-                queues.append(task_queue)
-                print(f"coordinator: Queueing tasks for worker_{worker} at step {step} of {steps - 1}")
-                task_queue.put((step, tasks))
-            print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
-            for queue in queues:
+                qs.append(task_queue)
+                task_queue.put("STOP")
+            print(f"coordinator: Waiting for all workers to shut down.")
+            for queue in qs:
                 queue.join()
-            print(f"coordinator: All workers at join point {step} of {steps - 1}")
 
-        qs = []
-        print(f"coordinator: Telling all workers to shut down.")
-        for worker, ctx in workers.items():
-            task_queue = ctx["queue"]
-            qs.append(task_queue)
-            task_queue.put("STOP")
-        print(f"coordinator: Waiting for all workers to shut down.")
-        for queue in qs:
-            queue.join()
+        def start_worker_processes(workers):
+            processes = [create_worker_process(ctx["worker"], ctx["queue"]) for _, ctx in workers.items()]
+
+            for p in processes:
+                p.start()
+
+        def initialize_worker_context(workers):
+            manager = multiprocessing.Manager()
+            return {worker.worker_id: worker_context(worker, manager) for worker in workers}
+
+        workers = initialize_worker_context(self.driver.workers)
+        start_worker_processes(workers)
+        run_task_loops(workers, self.client_allocations_per_worker)
+        shutdown_workers(workers)
 
     def on_task_finished(self, metrics, next_task_scheduled_in):
         if next_task_scheduled_in > 0:
@@ -395,8 +324,21 @@ class SingleNodeCoordinator:
         # This is sent to racecontrol? cf racecontrol.py::135
         # self.send(self.start_sender, TaskFinished(metrics, next_task_scheduled_in))
 
-    def update_samples(self, samples):
-        self.driver.update_samples(samples.samples)
+    def drain_result_queue(self):
+        results = []
+        while not self.result_queue.empty():
+            results.append(self.result_queue.get())
+
+    def update_samples(self):
+        res = self.result_queue.get()
+        if isinstance(res, UpdateSamples):
+            samples = res.samples
+            raw_samples = []
+            if len(samples) > 0:
+                raw_samples += samples
+                return raw_samples
+        else:
+            return None
 
     def start_benchmark(self):
         return self.driver.start_benchmark()
@@ -410,6 +352,7 @@ class SingleNodeCoordinator:
         self.prepare_track(self.cfg, self.driver.track)
         self.start_benchmark()
         self.run()
+
 
 class MultiNodeCoordinator:
     def __init__(self, cfg, driver):
@@ -446,7 +389,7 @@ class Driver:
         PROCESSOR_RUNNING = "processor running"
         PROCESSOR_COMPLETE = "processor complete"
 
-    def __init__(self, target, cfg, es_client_factory_class=client.EsClientFactory):
+    def __init__(self, target, cfg, coord_raw_samples, coord_most_recent_sample_per_client, es_client_factory_class=client.EsClientFactory):
         self.logger = logging.getLogger(__name__)
         self.target = target
         self.cfg = cfg
@@ -468,8 +411,8 @@ class Driver:
         self.progress_counter = 0
         self.quiet = False
         self.allocations = None
-        self.raw_samples = []
-        self.most_recent_sample_per_client = {}
+        self.raw_samples = coord_raw_samples
+        self.most_recent_sample_per_client = coord_most_recent_sample_per_client
         self.sample_post_processor = None
 
         self.number_of_steps = 0
@@ -557,7 +500,7 @@ class Driver:
         downsample_factor = int(self.cfg.opts("reporting", "metrics.request.downsample.factor", mandatory=False, default_value=1))
         self.metrics_store = metrics.metrics_store(cfg=self.cfg, track=self.track.name, challenge=self.challenge.name, read_only=False)
 
-        self.sample_post_processor = driver.driver.SamplePostprocessor(
+        self.target.sample_post_processor = driver.driver.SamplePostprocessor(
             self.metrics_store, downsample_factor, self.track.meta_data, self.challenge.meta_data
         )
 
@@ -630,185 +573,6 @@ class Driver:
                     self.target.client_allocations_per_worker[worker_id] = client_allocations
                     worker_id += 1
 
-#        self.update_progress_message()
-
-    def update_progress_message(self, task_finished=False):
-        if not self.quiet and self.current_step >= 0:
-            tasks = ",".join([t.name for t in self.tasks_per_join_point[self.current_step]])
-
-            if task_finished:
-                total_progress = 1.0
-            else:
-                # we only count clients which actually contribute to progress. If clients are executing tasks eternally in a parallel
-                # structure, we should not count them. The reason is that progress depends entirely on the client(s) that execute the
-                # task that is completing the parallel structure.
-                progress_per_client = [
-                    s.percent_completed for s in self.most_recent_sample_per_client.values() if s.percent_completed is not None
-                ]
-
-                num_clients = max(len(progress_per_client), 1)
-                total_progress = sum(progress_per_client) / num_clients
-            self.progress_reporter.print("Running %s" % tasks, "[%3d%% done]" % (round(total_progress * 100)))
-            if task_finished:
-                self.progress_reporter.finish()
-
-    def may_complete_current_task(self, task_allocations):
-        any_joinpoints_completing_parent = [a for a in task_allocations if a.task.any_task_completes_parent]
-        joinpoints_completing_parent = [a for a in task_allocations if a.task.preceding_task_completes_parent]
-
-        # If 'completed-by' is set to 'any', then we *do* want to check for completion by
-        # any client and *not* wait until the remaining runner has completed. This way the 'parallel' task will exit
-        # on the completion of _any_ client for any task, i.e. given a contrived track with two tasks to execute inside
-        # a parallel block:
-        #   * parallel:
-        #     * bulk-1, with clients 8
-        #     * bulk-2, with clients: 8
-        #
-        # 1. Both 'bulk-1' and 'bulk-2' execute in parallel
-        # 2. 'bulk-1' client[0]'s runner is first to complete and reach the next joinpoint successfully
-        # 3. 'bulk-1' will now cause the parent task to complete and _not_ wait for all 8 clients' runner to complete,
-        # or for 'bulk-2' at all
-        #
-        # The reasoning for the distinction between 'any_joinpoints_completing_parent' & 'joinpoints_completing_parent'
-        # is to simplify logic, otherwise we'd need to implement some form of state machine involving actor-to-actor
-        # communication.
-
-        if len(any_joinpoints_completing_parent) > 0 and not self.complete_current_task_sent:
-            self.logger.info(
-                "Any task before join point [%s] is able to complete the parent structure. Telling all clients to exit immediately.",
-                any_joinpoints_completing_parent[0].task,
-            )
-
-            self.complete_current_task_sent = True
-            for worker in self.workers:
-                self.target.complete_current_task(worker)
-
-        # If we have a specific 'completed-by' task specified, then we want to make sure that all clients for that task
-        # are able to complete their runners as expected before completing the parent
-        elif len(joinpoints_completing_parent) > 0 and not self.complete_current_task_sent:
-            # while this list could contain multiple items, it should always be the same task (but multiple
-            # different clients) so any item is sufficient.
-            current_join_point = joinpoints_completing_parent[0].task
-            self.logger.info(
-                "Tasks before join point [%s] are able to complete the parent structure. Checking "
-                "if all [%d] clients have finished yet.",
-                current_join_point,
-                len(current_join_point.clients_executing_completing_task),
-            )
-            pending_client_ids = []
-            for client_id in current_join_point.clients_executing_completing_task:
-                # We assume that all clients have finished if their corresponding worker has finished
-                worker_id = self.clients_per_worker[client_id]
-                if worker_id not in self.workers_completed_current_step:
-                    pending_client_ids.append(client_id)
-
-            # are all clients executing said task already done? if so we need to notify the remaining clients
-            if len(pending_client_ids) == 0:
-                # As we are waiting for other clients to finish, we would send this message over and over again.
-                # Hence we need to memorize whether we have already sent it for the current step.
-                self.complete_current_task_sent = True
-                self.logger.info("All affected clients have finished. Notifying all clients to complete their current tasks.")
-                for worker in self.workers:
-                    self.target.complete_current_task(worker)
-            else:
-                if len(pending_client_ids) > 32:
-                    self.logger.info("[%d] clients did not yet finish.", len(pending_client_ids))
-                else:
-                    self.logger.info("Client id(s) [%s] did not yet finish.", ",".join(map(str, pending_client_ids)))
-
-
-    def joinpoint_reached(self, worker_id, worker_local_timestamp, task_allocations):
-        self.currently_completed += 1
-        # This isn't thread-safe
-        self.workers_completed_current_step[worker_id] = (worker_local_timestamp, time.perf_counter())
-        self.logger.info(
-            "[%d/%d] workers reached join point [%d/%d].",
-            self.currently_completed,
-            len(self.workers),
-            self.current_step + 1,
-            self.number_of_steps,
-        )
-        if self.currently_completed == len(self.workers):
-            self.logger.info("All workers completed their tasks until join point [%d/%d].", self.current_step + 1, self.number_of_steps)
-            # we can go on to the next step
-            self.currently_completed = 0
-            self.complete_current_task_sent = False
-            # make a copy and reset early to avoid any race conditions from clients that reach a join point already while we are sending...
-            workers_curr_step = self.workers_completed_current_step
-            self.workers_completed_current_step = {}
-            self.update_progress_message(task_finished=True)
-            # clear per step
-            self.most_recent_sample_per_client = {}
-            self.current_step += 1
-
-            self.logger.debug("Postprocessing samples...")
-            self.post_process_samples()
-            if self.finished():
-                #self.telemetry.on_benchmark_stop()
-                self.logger.info("All steps completed.")
-                # Some metrics store implementations return None because no external representation is required.
-                # pylint: disable=assignment-from-none
-                m = self.metrics_store.to_externalizable(clear=True)
-                self.logger.debug("Closing metrics store...")
-                self.metrics_store.close()
-                # immediately clear as we don't need it anymore and it can consume a significant amount of memory
-                self.metrics_store = None
-                self.logger.debug("Sending benchmark results...")
-                self.target.on_benchmark_complete(m)
-            else:
-                self.move_to_next_task(workers_curr_step)
-        else:
-            self.may_complete_current_task(task_allocations)
-
-    def update_samples(self, samples):
-        if len(samples) > 0:
-            self.raw_samples += samples
-            # We need to check all samples, they will be from different clients
-            for s in samples:
-                self.most_recent_sample_per_client[s.client_id] = s
-
-    def post_process_samples(self):
-        # we do *not* do this here to avoid concurrent updates (actors are single-threaded) but rather to make it clear that we use
-        # only a snapshot and that new data will go to a new sample set.
-        raw_samples = self.raw_samples
-        self.raw_samples = []
-        self.sample_post_processor(raw_samples)
-
-    def finished(self):
-        return self.current_step == self.number_of_steps
-
-
-    def move_to_next_task(self, workers_curr_step):
-#        print(f"workers_curr_step: {workers_curr_step}")
-        if self.cfg.opts("track", "test.mode.enabled"):
-            # don't wait if test mode is enabled and start the next task immediately.
-            waiting_period = 0
-        else:
-            # start the next task in one second (relative to master's timestamp)
-            #
-            # Assumption: We don't have a lot of clock skew between reaching the join point and sending the next task
-            #             (it doesn't matter too much if we're a few ms off).
-            waiting_period = 1.0
-        # Some metrics store implementations return None because no external representation is required.
-        # pylint: disable=assignment-from-none
-        m = self.metrics_store.to_externalizable(clear=True)
-        self.target.on_task_finished(m, waiting_period)
-        # Using a perf_counter here is fine also in the distributed case as we subtract it from `master_received_msg_at` making it
-        # a relative instead of an absolute value.
-        start_next_task = time.perf_counter() + waiting_period
-        for worker_id, worker in enumerate(self.workers):
-            worker_ended_task_at, master_received_msg_at = workers_curr_step[worker_id]
-            worker_start_timestamp = worker_ended_task_at + (start_next_task - master_received_msg_at)
-            self.logger.info(
-                "Scheduling next task for worker id [%d] at their timestamp [%f] (master timestamp [%f])",
-                worker_id,
-                worker_start_timestamp,
-                start_next_task,
-            )
-            self.target.drive_at(worker, worker_start_timestamp)
-
-
-
 @context()
 @socket(zmq.PUSH)
 @socket(zmq.PULL)
@@ -832,7 +596,7 @@ def drive_old(cfg, ctx, coordinator, sink):
 
 
 def drive(cfg):
-    #multiprocessing.log_to_stderr(logging.DEBUG)
+#    multiprocessing.log_to_stderr(logging.DEBUG)
     single_driver = len(cfg.opts("driver", "load_driver_hosts")) == 1
     coordinator = SingleNodeCoordinator(cfg) if single_driver else MultiNodeCoordinator(cfg)
     coordinator.execute()
