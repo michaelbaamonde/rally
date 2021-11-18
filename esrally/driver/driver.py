@@ -302,6 +302,7 @@ class DriverActor(actor.RallyActor):
 
     def create_client(self, host, cfg):
         worker = self.createActor(Worker, targetActorRequirements=self._requirements(host))
+        # Does this work? Can't find a corresponding receivemsg for Worker actors
         self.send(worker, Bootstrap(cfg))
         return worker
 
