@@ -148,14 +148,15 @@ class LoadGenerationWorker:
             if msg == self.poison_pill:
                 handle_poison_pill()
                 break
+            elif not msg[1]:
+                self.task_queue.task_done()
             else:
-                step, tasks = msg
-                if not tasks:
-                    self.task_queue.task_done()
-                elif isinstance(tasks, JoinPoint):
+                step, ta = msg
+                task = ta[0].task
+                if isinstance(task, driver.driver.JoinPoint):
                     at_joinpoint(step)
                 else:
-                    execute_tasks(step, tasks)
+                    execute_tasks(step, ta)
                     task_finished()
         return
 
@@ -382,8 +383,39 @@ class SingleNodeDriver:
             print(f"coordinator: Sending results to benchmark coordinator...")
             self.benchmark_coordinator.on_benchmark_complete(m)
 
+        def may_complete_current_task(task_allocations):
+            any_joinpoints_completing_parent = [a for a in task_allocations if a.task.any_task_completes_parent]
+            joinpoints_completing_parent = [a for a in task_allocations if a.task.preceding_task_completes_parent]
+            print(f"any: {any_joinpoints_completing_parent}")
+            print(f"preceding: {joinpoints_completing_parent}")
+
+            # if len(any_joinpoints_completing_parent):
+            #     self.complete_current_task_sent = True
+            #     for worker in self.workers:
+            #         self.complete_current_task(worker)
+
+            # elif len(joinpoints_completing_parent):
+            #     current_join_point = joinpoints_completing_parent[0].task
+            #     pending_client_ids = []
+            #     for client_id in current_join_point.clients_executing_completing_task:
+            #         # We assume that all clients have finished if their corresponding worker has finished
+            #         worker_id = self.clients_per_worker[client_id]
+            #         if worker_id not in self.workers_completed_current_step:
+            #             pending_client_ids.append(client_id)
+
+            #     if len(pending_client_ids) == 0:
+            #         self.complete_current_task_sent = True
+            #         for worker in self.workers:
+            #             self.target.complete_current_task(worker)
+            #     else:
+            #         if len(pending_client_ids) > 32:
+            #             self.logger.info("[%d] clients did not yet finish.", len(pending_client_ids))
+            #         else:
+            #             self.logger.info("Client id(s) [%s] did not yet finish.", ",".join(map(str, pending_client_ids)))
+
         def run_task_loops(workers, allocations):
-            steps = self.number_of_steps * 2 + 1
+            steps = self.number_of_steps * 2
+            raw_allocations = self.allocations
 
             for step in range(steps):
                 queues = []
@@ -391,10 +423,10 @@ class SingleNodeDriver:
                     worker_id = worker.worker_id
                     task_queue = worker.task_queue
                     ta = allocations[worker_id]
-                    if ta.is_joinpoint(step):
-                        tasks = JoinPoint(step)
-                    else:
-                        tasks = ta.tasks(step)
+                    raw_allocation = raw_allocations[worker_id][step]
+#                    print(raw_allocation)
+#                        print(f"HAY: {raw_allocation.any_task_completes_parent}")
+                    tasks = ta.tasks(step)
                     queues.append((worker_id, task_queue))
                     print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
                     task_queue.put((step, tasks))
