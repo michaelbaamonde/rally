@@ -99,7 +99,7 @@ class LoadGenerationWorker:
     It will also regularly send measurements to the coordinator node so it can consolidate them.
     """
 
-    def __init__(self, coordinator, cfg, worker_id, track, task_queue, sample_queue):
+    def __init__(self, coordinator, cfg, worker_id, track, task_queue, sample_queue, complete):
         self.logger = logging.getLogger(__name__)
         self.coordinator = coordinator
         self.worker_id = worker_id
@@ -111,7 +111,7 @@ class LoadGenerationWorker:
         self.cancel = threading.Event()
         # used to indicate that we want to prematurely consider this completed. This is *not* due to cancellation
         # but a regular event in a benchmark and used to model task dependency of parallel tasks.
-        self.complete = threading.Event()
+        self.complete = complete
 
         self.poison_pill = "STOP"
         self.task_queue = task_queue
@@ -208,7 +208,8 @@ class SingleNodeDriver:
 
     def create_worker(self, cfg, worker_id, track):
         task_queue = self.manager.JoinableQueue()
-        worker = LoadGenerationWorker(self, cfg, worker_id, track, task_queue, self.sample_queue)
+        complete = self.manager.Event()
+        worker = LoadGenerationWorker(self, cfg, worker_id, track, task_queue, self.sample_queue, complete)
         worker.initialize()
         return worker
 
@@ -383,18 +384,15 @@ class SingleNodeDriver:
             print(f"coordinator: Sending results to benchmark coordinator...")
             self.benchmark_coordinator.on_benchmark_complete(m)
 
-        def may_complete_current_task(task_allocations):
-            any_joinpoints_completing_parent = [a for a in task_allocations if a.task.any_task_completes_parent]
-            joinpoints_completing_parent = [a for a in task_allocations if a.task.preceding_task_completes_parent]
-            print(f"any: {any_joinpoints_completing_parent}")
-            print(f"preceding: {joinpoints_completing_parent}")
+        # def may_complete_current_task(task_allocations):
+        #     any_joinpoints_completing_parent = [a for a in task_allocations if a.task.any_task_completes_parent]
+        #     joinpoints_completing_parent = [a for a in task_allocations if a.task.preceding_task_completes_parent]
 
-            # if len(any_joinpoints_completing_parent):
-            #     self.complete_current_task_sent = True
-            #     for worker in self.workers:
-            #         self.complete_current_task(worker)
+        #     if not any_joinpoints_completing_parent:
+        #         for worker in self.workers:
+        #             worker.complete.set()
 
-            # elif len(joinpoints_completing_parent):
+            # elif len(joinpoints_completing_parent) > 0:
             #     current_join_point = joinpoints_completing_parent[0].task
             #     pending_client_ids = []
             #     for client_id in current_join_point.clients_executing_completing_task:
@@ -414,10 +412,10 @@ class SingleNodeDriver:
             #             self.logger.info("Client id(s) [%s] did not yet finish.", ",".join(map(str, pending_client_ids)))
 
         def run_task_loops(workers, allocations):
-            steps = self.number_of_steps * 2
+            steps = self.number_of_steps * 2 + 1
             raw_allocations = self.allocations
 
-            for step in range(1):
+            for step in range(steps):
                 queues = []
                 for worker in workers:
                     worker_id = worker.worker_id
@@ -425,10 +423,13 @@ class SingleNodeDriver:
                     ta = allocations[worker_id]
 #                    raw_allocation = raw_allocations[worker_id][step]
                     tasks = ta.tasks(step)
-                    print(f"complete? {may_complete_current_task(tasks)}")
+#                    may_complete_current_task(tasks)
+#                    print(f"complete? {may_complete_current_task(tasks)}")
                     queues.append((worker_id, task_queue))
                     print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
                     task_queue.put((step, tasks))
+                    if step == 31:
+                        worker.complete.set()
                 print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
                 for worker, queue in queues:
                     queue.join()
