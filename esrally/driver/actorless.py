@@ -99,7 +99,7 @@ class LoadGenerationWorker:
     It will also regularly send measurements to the coordinator node so it can consolidate them.
     """
 
-    def __init__(self, coordinator, cfg, worker_id, track, task_queue, sample_queue, complete):
+    def __init__(self, coordinator, cfg, worker_id, track, task_queue, sample_queue, complete_event, complete_queue):
         self.logger = logging.getLogger(__name__)
         self.coordinator = coordinator
         self.worker_id = worker_id
@@ -111,7 +111,8 @@ class LoadGenerationWorker:
         self.cancel = threading.Event()
         # used to indicate that we want to prematurely consider this completed. This is *not* due to cancellation
         # but a regular event in a benchmark and used to model task dependency of parallel tasks.
-        self.complete = complete
+        self.complete = complete_event
+        self.complete_queue = complete_queue
 
         self.poison_pill = "STOP"
         self.task_queue = task_queue
@@ -122,6 +123,17 @@ class LoadGenerationWorker:
         track.set_absolute_data_path(self.cfg, self.track)
         self.cancel.clear()
         runner.register_default_runners()
+
+    def complete_task(self):
+        while True:
+            try:
+                msg = self.complete_queue.get(block=True, timeout=0.05)
+                if msg == "COMPLETE":
+                    print(f"cancellation_worker_{self.worker_id}: completing current task")
+                    self.complete.set()
+            except queue.Empty:
+                continue
+        return
 
     def drive(self):
         def handle_poison_pill():
@@ -199,6 +211,7 @@ class SingleNodeDriver:
 
         self.allocations = None
         self.workers = []
+        self.cancellation_workers = None
         self.client_allocations_per_worker = {}
 
         self.cluster_details = {}
@@ -208,8 +221,9 @@ class SingleNodeDriver:
 
     def create_worker(self, cfg, worker_id, track):
         task_queue = self.manager.JoinableQueue()
-        complete = self.manager.Event()
-        worker = LoadGenerationWorker(self, cfg, worker_id, track, task_queue, self.sample_queue, complete)
+        complete_queue = self.manager.Queue()
+        complete_event = self.manager.Event()
+        worker = LoadGenerationWorker(self, cfg, worker_id, track, task_queue, self.sample_queue, complete_event, complete_queue)
         worker.initialize()
         return worker
 
@@ -221,6 +235,16 @@ class SingleNodeDriver:
         processes = [self.worker_process(worker) for _, worker in enumerate(self.workers)]
 
         for p in processes:
+            p.start()
+
+    def worker_cancellation_process(self, worker):
+        process_name = f"cancel_{worker.worker_id}"
+        return multiprocessing.Process(name=process_name, target=worker.complete_task)
+
+    def start_worker_cancellation_processes(self):
+        self.cancellation_workers = [self.worker_cancellation_process(worker) for _, worker in enumerate(self.workers)]
+
+        for p in self.cancellation_workers:
             p.start()
 
     def create_es_clients(self):
@@ -421,15 +445,12 @@ class SingleNodeDriver:
                     worker_id = worker.worker_id
                     task_queue = worker.task_queue
                     ta = allocations[worker_id]
-#                    raw_allocation = raw_allocations[worker_id][step]
                     tasks = ta.tasks(step)
-#                    may_complete_current_task(tasks)
-#                    print(f"complete? {may_complete_current_task(tasks)}")
                     queues.append((worker_id, task_queue))
                     print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
                     task_queue.put((step, tasks))
                     if step == 31:
-                        worker.complete.set()
+                        worker.complete_queue.put("COMPLETE")
                 print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
                 for worker, queue in queues:
                     queue.join()
@@ -448,9 +469,16 @@ class SingleNodeDriver:
             for queue in qs:
                 queue.join()
 
+        def shutdown_cancellation_workers(workers):
+            print(f"coordinator: Closing all cancellation worker queues.")
+            for process in self.cancellation_workers:
+                process.terminate()
+
         self.start_worker_processes()
+        self.start_worker_cancellation_processes()
         run_task_loops(self.workers, self.client_allocations_per_worker)
         shutdown_workers(self.workers)
+        shutdown_cancellation_workers(self.cancellation_workers)
 
     def drain_sample_queue(self):
         results = []
