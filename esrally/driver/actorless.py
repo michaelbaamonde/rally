@@ -417,16 +417,15 @@ class SingleNodeDriver:
             steps = self.number_of_steps * 2
             raw_allocations = self.allocations
 
-            for step in range(steps):
+            for step in range(1):
                 queues = []
                 for worker in workers:
                     worker_id = worker.worker_id
                     task_queue = worker.task_queue
                     ta = allocations[worker_id]
-                    raw_allocation = raw_allocations[worker_id][step]
-#                    print(raw_allocation)
-#                        print(f"HAY: {raw_allocation.any_task_completes_parent}")
+#                    raw_allocation = raw_allocations[worker_id][step]
                     tasks = ta.tasks(step)
+                    print(f"complete? {may_complete_current_task(tasks)}")
                     queues.append((worker_id, task_queue))
                     print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
                     task_queue.put((step, tasks))
