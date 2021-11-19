@@ -47,6 +47,7 @@ from esrally.driver import runner, scheduler
 from esrally.track import TrackProcessorRegistry, load_track, load_track_plugins
 from esrally.utils import console, convert, net
 
+
 def load_local_config(coordinator_config):
     cfg = config.auto_load_local_config(
         coordinator_config,
@@ -69,7 +70,6 @@ def num_cores(cfg):
     return int(cfg.opts("system", "available.cores", mandatory=False, default_value=multiprocessing.cpu_count()))
 
 
-
 class UpdateSamples:
     """
     Used to send samples from a load generator node to the master.
@@ -78,6 +78,7 @@ class UpdateSamples:
     def __init__(self, client_id, samples):
         self.client_id = client_id
         self.samples = samples
+
 
 class SamplePostprocessor:
     def __init__(self, metrics_store, downsample_factor, track_meta_data, challenge_meta_data):
@@ -1353,6 +1354,7 @@ class IterationBased:
 
     def __str__(self):
         return "iteration-count-based"
+
 
 @dataclass(frozen=True)
 class WorkerTask:

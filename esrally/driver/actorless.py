@@ -99,7 +99,7 @@ class LoadGenerationWorker:
     It will also regularly send measurements to the coordinator node so it can consolidate them.
     """
 
-    def __init__(self, coordinator, cfg, worker_id, track):
+    def __init__(self, coordinator, cfg, worker_id, track, task_queue, sample_queue):
         self.logger = logging.getLogger(__name__)
         self.coordinator = coordinator
         self.worker_id = worker_id
@@ -113,42 +113,50 @@ class LoadGenerationWorker:
         # but a regular event in a benchmark and used to model task dependency of parallel tasks.
         self.complete = threading.Event()
 
-        self.task_queue = None
-        self.sample_queue = None
+        self.poison_pill = "STOP"
+        self.task_queue = task_queue
+        self.sample_queue = sample_queue
         self.sampler = None
 
-    def start(self):
-        self.logger.info("Worker[%d] is about to start.", self.worker_id)
+    def initialize(self):
         track.set_absolute_data_path(self.cfg, self.track)
         self.cancel.clear()
         runner.register_default_runners()
 
-    def drive(self, task_queue):
-        self.task_queue = task_queue
+    def drive(self):
+        def handle_poison_pill():
+            print(f"worker_{self.worker_id}: Shutting down.")
+            self.task_queue.task_done()
+
+        def execute_tasks(step, tasks):
+            print(f"worker_{self.worker_id}: Executing tasks: {tasks}")
+            self.sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=self.sample_queue_size)
+            AsyncIoAdapter(self.cfg, self.track, tasks, self.sampler, self.cancel, self.complete, self.on_error).__call__()
+
+        def task_finished():
+            self.task_queue.task_done()
+
+        def at_joinpoint(step):
+            print(f"worker_{self.worker_id}: Reached join point at step {step}.")
+            self.send_samples()
+            self.cancel.clear()
+            self.sampler = None
+            self.task_queue.task_done()
+
         while True:
             msg = self.task_queue.get()
-            # Poison pill
-            if msg == "STOP":
-                print(f"worker_{self.worker_id}: Shutting down.")
-                self.task_queue.task_done()
+            if msg == self.poison_pill:
+                handle_poison_pill()
                 break
             else:
                 step, tasks = msg
                 if not tasks:
                     self.task_queue.task_done()
                 elif isinstance(tasks, JoinPoint):
-                    print(f"worker_{self.worker_id}: Reached join point at step {step}.")
-                    self.send_samples()
-                    self.cancel.clear()
-                    self.sampler = None
-                    self.task_queue.task_done()
+                    at_joinpoint(step)
                 else:
-                    print(f"worker_{self.worker_id}: Executing tasks: {tasks}")
-                    self.sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=self.sample_queue_size)
-                    AsyncIoAdapter(self.cfg, self.track, tasks, self.sampler, self.cancel, self.complete, self.on_error).__call__()
-                    # TODO: Is this right?
-                    self.coordinator.reset_relative_time()
-                    task_queue.task_done()
+                    execute_tasks(step, tasks)
+                    task_finished()
         return
 
     def send_samples(self):
@@ -196,6 +204,22 @@ class SingleNodeDriver:
 
         self.telemetry = None
         self.status = self.Status.INITIALIZING
+
+    def create_worker(self, cfg, worker_id, track):
+        task_queue = self.manager.JoinableQueue()
+        worker = LoadGenerationWorker(self, cfg, worker_id, track, task_queue, self.sample_queue)
+        worker.initialize()
+        return worker
+
+    def worker_process(self, worker):
+        process_name = f"worker_{worker.worker_id}"
+        return multiprocessing.Process(name=process_name, target=worker.drive)
+
+    def start_worker_processes(self):
+        processes = [self.worker_process(worker) for _, worker in enumerate(self.workers)]
+
+        for p in processes:
+            p.start()
 
     def create_es_clients(self):
         all_hosts = self.cfg.opts("client", "hosts").all_hosts
@@ -296,17 +320,12 @@ class SingleNodeDriver:
 
             self.load_driver_hosts.append(host_config)
 
-    def start_benchmark(self):
-        self.logger.info("Benchmark is about to start.")
-
-        # TODO
-        # ensure relative time starts when the benchmark starts.
-        self.reset_relative_time()
-
+    def start_telemetry_devices(self):
         self.logger.info("Attaching cluster-level telemetry devices.")
         self.telemetry.on_benchmark_start()
         self.logger.info("Cluster-level telemetry devices are now attached.")
 
+    def allocate_workers(self):
         allocator = driver.driver.Allocator(self.challenge.schedule)
         self.allocations = allocator.allocations
         self.number_of_steps = len(allocator.join_points) - 1
@@ -329,7 +348,6 @@ class SingleNodeDriver:
                     for client_id in clients:
                         client_allocations.add(client_id, self.allocations[client_id])
                     worker = self.create_worker(self.cfg, worker_id, self.track)
-                    self.start_worker(worker)
                     self.workers.append(worker)
                     self.client_allocations_per_worker[worker_id] = client_allocations
                     worker_id += 1
@@ -339,89 +357,68 @@ class SingleNodeDriver:
         track_preparator = TrackPreparationWorker(cfg, track, registry, self.track_preparation_queue, self.cores)
         track_preparator.prepare_track()
 
-    def create_worker(self, cfg, worker_id, track):
-        worker = LoadGenerationWorker(self, cfg, worker_id, track)
-        worker.sample_queue = self.sample_queue
-        return worker
-
-    def start_worker(self, worker_process):
-        worker_process.start()
+    # def start_worker(self, worker_process):
+    #     worker_process.start()
 
     def run(self):
-        def worker_allocations(worker_id, allocations):
-            return allocations[worker_id].allocations
+        def complete_step(step, steps):
+            print(f"coordinator: All workers at join point {step} of {steps - 1}")
+            print(f"coordinator: Postprocessing samples for step {step} of {steps - 1}")
+            raw_samples = self.update_samples()
+            if raw_samples is not None:
+                self.sample_post_processor(raw_samples)
+            print(f"coordinator: Done postprocessing samples for step {step} of {steps - 1}")
+            self.reset_relative_time()
+            m = self.metrics_store.to_externalizable(clear=True)
+            self.benchmark_coordinator.on_task_finished(m)
 
-        def create_worker_process(worker, task_queue):
-            process_name = f"worker_{worker.worker_id}"
-            return multiprocessing.Process(name=process_name, target=worker.drive, args=(task_queue,))
-
-        def worker_context(worker, manager):
-            return {"worker": worker, "queue": manager.JoinableQueue()}
+        def complete_benchmark():
+            print(f"coordinator: All steps completed.")
+            m = self.metrics_store.to_externalizable(clear=True)
+            print(f"coordinator: Closing metrics store...")
+            self.metrics_store.close()
+            # immediately clear as we don't need it anymore and it can consume a significant amount of memory
+            self.metrics_store = None
+            print(f"coordinator: Sending results to benchmark coordinator...")
+            self.benchmark_coordinator.on_benchmark_complete(m)
 
         def run_task_loops(workers, allocations):
-            # TODO: Figure out why this is necessary
             steps = self.number_of_steps * 2 + 1
 
             for step in range(steps):
                 queues = []
-                for worker, ctx in workers.items():
-                    task_queue = ctx["queue"]
-                    ta = allocations[worker]
+                for worker in workers:
+                    worker_id = worker.worker_id
+                    task_queue = worker.task_queue
+                    ta = allocations[worker_id]
                     if ta.is_joinpoint(step):
                         tasks = JoinPoint(step)
                     else:
                         tasks = ta.tasks(step)
-                    queues.append((worker, task_queue))
+                    queues.append((worker_id, task_queue))
                     print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
                     task_queue.put((step, tasks))
                 print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
                 for worker, queue in queues:
                     queue.join()
                     print(f"coordinator: worker_{worker} at join point {step} of {steps - 1}")
-                print(f"coordinator: All workers at join point {step} of {steps - 1}")
-                print(f"coordinator: Postprocessing samples for step {step} of {steps - 1}")
-                raw_samples = self.update_samples()
-                if raw_samples is not None:
-                    self.sample_post_processor(raw_samples)
-                print(f"coordinator: Done postprocessing samples for step {step} of {steps - 1}")
-
-            print(f"coordinator: All steps completed.")
-            m = self.metrics_store.to_externalizable(clear=True)
-            print(f"Closing metrics store...")
-            self.metrics_store.close()
-            # immediately clear as we don't need it anymore and it can consume a significant amount of memory
-            self.metrics_store = None
-            print("Sending benchmark results...")
-            self.benchmark_coordinator.on_benchmark_complete(m)
+                complete_step(step, steps)
+            complete_benchmark()
 
         def shutdown_workers(workers):
             qs = []
             print(f"coordinator: Telling all workers to shut down.")
-            for worker, ctx in workers.items():
-                task_queue = ctx["queue"]
+            for worker in workers:
+                task_queue = worker.task_queue
                 qs.append(task_queue)
                 task_queue.put("STOP")
             print(f"coordinator: Waiting for all workers to shut down.")
             for queue in qs:
                 queue.join()
 
-        def start_worker_processes(workers):
-            processes = [create_worker_process(ctx["worker"], ctx["queue"]) for _, ctx in workers.items()]
-
-            for p in processes:
-                p.start()
-
-        def initialize_worker_context(workers):
-            manager = multiprocessing.Manager()
-            return {worker.worker_id: worker_context(worker, manager) for worker in workers}
-
-        workers = initialize_worker_context(self.workers)
-        start_worker_processes(workers)
-        run_task_loops(workers, self.client_allocations_per_worker)
-        shutdown_workers(workers)
-
-    def on_task_finished(self, metrics, next_task_scheduled_in):
-        pass
+        self.start_worker_processes()
+        run_task_loops(self.workers, self.client_allocations_per_worker)
+        shutdown_workers(self.workers)
 
     def drain_sample_queue(self):
         results = []
@@ -449,7 +446,9 @@ class SingleNodeDriver:
         self.prepare_track(self.cfg, self.track)
         # Hard-code these for now, since we're not hooked up to the racecontrol machinery yet
         self.benchmark_coordinator.on_preparation_complete("basic", "7.15.1", "master")
-        self.start_benchmark()
+        self.reset_relative_time()
+        self.start_telemetry_devices()
+        self.allocate_workers()
         self.run()
 
 
@@ -459,4 +458,5 @@ def race(cfg):
         coordinator = SingleNodeDriver(cfg)
         coordinator.execute()
     else:
-        raise (exceptions.RallyError(f"Race configured with {number_of_drivers} load drivers, but --actorless only supports one."))
+        msg = f"Race configured with {number_of_drivers} load drivers, but --actorless currently only supports one."
+        raise (exceptions.RallyError(msg))
