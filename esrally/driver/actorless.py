@@ -383,9 +383,6 @@ class SingleNodeDriver:
         track_preparator = TrackPreparationWorker(cfg, track, registry, self.track_preparation_queue, self.cores)
         track_preparator.prepare_track()
 
-    # def start_worker(self, worker_process):
-    #     worker_process.start()
-
     def run(self):
         def complete_step(step, steps):
             print(f"coordinator: All workers at join point {step} of {steps - 1}")
