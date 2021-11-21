@@ -134,6 +134,9 @@ class LoadGenerationWorker:
             AsyncIoAdapter(self.cfg, self.track, tasks, self.sampler, self.cancel, self.complete, self.on_error).__call__()
 
         def task_finished():
+            self.send_samples()
+            self.cancel.clear()
+            self.sampler = None
             self.task_queue.task_done()
 
         def at_joinpoint(step):
@@ -152,8 +155,6 @@ class LoadGenerationWorker:
                 step, tasks = msg
                 if not tasks:
                     self.task_queue.task_done()
-                elif isinstance(tasks, JoinPoint):
-                    at_joinpoint(step)
                 else:
                     execute_tasks(step, tasks)
                     task_finished()
