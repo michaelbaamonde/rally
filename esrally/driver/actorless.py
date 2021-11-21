@@ -384,27 +384,27 @@ class SingleNodeDriver:
             self.benchmark_coordinator.on_benchmark_complete(m)
 
         def run_task_loops(workers, allocations):
-            steps = self.number_of_steps * 2 + 1
+            steps = self.number_of_steps * 2
 
             for step in range(steps):
                 queues = []
+                tasks = []
                 for worker in workers:
                     worker_id = worker.worker_id
                     task_queue = worker.task_queue
                     ta = allocations[worker_id]
-                    if ta.is_joinpoint(step):
-                        tasks = JoinPoint(step)
-                    else:
-                        tasks = ta.tasks(step)
-                    queues.append((worker_id, task_queue))
-                    print(f"coordinator: Queueing tasks {tasks} for worker_{worker} at step {step} of {steps - 1}")
-                    task_queue.put((step, tasks))
+                    if not ta.is_joinpoint(step):
+                        t = ta.tasks(step)
+                        if t is not None:
+                            queues.append((worker_id, task_queue))
+                            task_queue.put((step, ta.tasks(step)))
                 print(f"coordinator: Waiting for workers to complete step {step} of {steps - 1}")
                 for worker, queue in queues:
                     queue.join()
                     print(f"coordinator: worker_{worker} at join point {step} of {steps - 1}")
                 complete_step(step, steps)
             complete_benchmark()
+
 
         def shutdown_workers(workers):
             qs = []
