@@ -109,7 +109,7 @@ def initialize_worker(cfg, track, cancel, complete):
 def execute_task(worker_id, tasks):
     f = execute_task
     time.sleep(0)
-    print(f"worker_{worker_id} executing {tasks}")
+    print(f"worker_{worker_id}: executing {tasks}")
     if tasks:
         sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=f.sample_queue_size)
         AsyncIoAdapter(f.cfg, f.track, tasks, sampler, f.cancel, f.complete, f.on_error).__call__()
@@ -150,6 +150,8 @@ class SingleNodeDriver:
 
         self.telemetry = None
         self.status = self.Status.INITIALIZING
+
+        self.complete = self.manager.Event()
 
     def create_es_clients(self):
         all_hosts = self.cfg.opts("client", "hosts").all_hosts
@@ -313,6 +315,9 @@ class SingleNodeDriver:
             m = self.metrics_store.to_externalizable(clear=True)
             self.benchmark_coordinator.on_task_finished(m)
 
+        def signal_completion(result):
+            self.complete.set()
+
         def run_task_loops(workers, allocations):
             steps = self.number_of_steps * 2 + 1
             tasks_per_step = []
@@ -338,9 +343,13 @@ class SingleNodeDriver:
             with pool:
                 for step, tasks in enumerate(tasks_per_step):
                     inputs = [(w, t) for w, t in tasks if t]
-                    samples = pool.starmap(execute_task, inputs)
+                    samples = pool.starmap_async(execute_task, inputs, callback=signal_completion)
+                    if step == 3:
+                        self.complete.wait()
+                        print(f"coordinator: Cancelling tasks")
+                    samples.wait()
                     raw_samples = []
-                    for worker_id, worker_timestamp, sample in samples:
+                    for worker_id, worker_timestamp, sample in samples.get():
                         raw_samples += sample
                     complete_task(raw_samples, step)
                 complete_benchmark()
