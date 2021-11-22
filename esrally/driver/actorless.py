@@ -343,6 +343,11 @@ class SingleNodeDriver:
             with pool:
                 for step, tasks in enumerate(tasks_per_step):
                     inputs = [(w, t) for w, t in tasks if t]
+                    # TODO: We'll need to use apply_async for the callback to
+                    # execute on *each* function invocation. Another (maybe
+                    # better) option is to ditch this callback mechanism and
+                    # just have execute_task() call signal_completion()
+                    # directly.
                     samples = pool.starmap_async(execute_task, inputs, callback=signal_completion)
                     if step == 3:
                         self.complete.wait()
