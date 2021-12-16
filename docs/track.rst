@@ -47,7 +47,7 @@ When a track repository has several branches, Rally will pick the most appropria
 #. *Exact match major.minor* (e.g. ``7.10``)
 #. *Nearest prior minor branch*
 
-    e.g. if available branches are ``master``, ``7``, ``7.2`` and ``7.11`` attempting to benchmarking ES ``7.10.2`` will pick ``7.2``, whereas benchmarking ES ``7.12.1`` will pick branch ``7.11``
+    e.g. if available branches are ``master``, ``7``, ``7.2`` and ``7.11`` attempting to benchmark ES ``7.10.2`` will pick ``7.2``, whereas benchmarking ES ``7.12.1`` will pick branch ``7.11``
 #. *Nearest major branch*
 
     e.g. if available branches are ``master``, ``5``, ``6`` and ``7``, benchmarking ES ``7.11.0`` will pick branch ``7``
