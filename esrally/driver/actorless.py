@@ -317,7 +317,7 @@ class SingleNodeDriver:
             self.benchmark_coordinator.on_benchmark_complete(m)
 
         def complete_task(samples, step):
-            print(f"coordinator: all tasks complete for step {step}")
+            print(f"coordinator: All tasks complete for step {step}")
             self.sample_post_processor(samples)
             self.reset_relative_time()
             self.cancel.clear()
@@ -365,7 +365,7 @@ class SingleNodeDriver:
                             pending = exit_condition.clients_executing_completing_task
                             finished = []
                             while not all(client in finished for client in pending):
-                                print(f"Waiting on {len(set(pending) ^ set(finished))} pending clients.")
+                                print(f"coordinator: Waiting on {len(set(pending) ^ set(finished))} pending clients.")
                                 finished.append(self.client_queue.get())
                             print(f"coordinator: All clients complete. Cancelling in-flight tasks.")
                             self.cancel.set()
@@ -379,8 +379,6 @@ class SingleNodeDriver:
                         raw_samples += sample
                     complete_task(raw_samples, step)
                 complete_benchmark()
-
-            print(completing_joinpoints)
 
         run_task_loops(self.client_allocations_per_worker)
 
