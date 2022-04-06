@@ -333,7 +333,6 @@ class SingleNodeDriver:
             task_idx = 0
             for step in range(1, steps, 2):
                 tasks = []
-
                 for worker_id, allocation in self.client_allocations_per_worker.items():
                     if not allocation.is_joinpoint(step):
                         tasks.append((worker_id, allocation.tasks(step)))
