@@ -342,7 +342,7 @@ class SingleNodeDriver:
         self.benchmark_coordinator.on_task_finished(m)
 
     def run_tasks(self):
-        def handle_any_task_completes():
+        def cancel_after_any_task_completes():
             print(f"coordinator: Any task completes this step.")
             print(f"coordinator: Waiting for at least one task to complete.")
             self.complete.wait()
@@ -350,7 +350,7 @@ class SingleNodeDriver:
             self.cancel.set()
             print(f"coordinator: Remaining tasks cancelled.")
 
-        def handle_preceding_task_completes():
+        def cancel_after_specific_task_completes():
             print(f"coordinator: A specific task completes this step.")
             print(f"coordinator: Waiting for all clients of that task to finish.")
             pending = exit_condition.clients_executing_completing_task
@@ -378,9 +378,9 @@ class SingleNodeDriver:
                 # to the pool of workers
                 if exit_condition:
                     if exit_condition.preceding_task_completes_parent:
-                        handle_preceding_task_completes()
+                        cancel_after_specific_task_completes()
                     elif exit_condition.any_task_completes_parent:
-                        handle_any_task_completes()
+                        cancel_after_any_task_completes()
                 raw_samples = []
                 for worker_id, worker_timestamp, sample in results:
                     raw_samples += sample
