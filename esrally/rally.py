@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from multiprocessing import set_start_method
+
 import argparse
 import datetime
 import logging
@@ -1087,4 +1089,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # Not sure if this is having any effect
+    #set_start_method("spawn", True)
     main()

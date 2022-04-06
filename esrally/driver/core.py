@@ -605,13 +605,14 @@ class ThroughputCalculator:
 
 
 class AsyncIoAdapter:
-    def __init__(self, cfg, track, task_allocations, sampler, cancel, complete, abort_on_error):
+    def __init__(self, cfg, track, task_allocations, sampler, cancel, complete, abort_on_error, client_queue):
         self.cfg = cfg
         self.track = track
         self.task_allocations = task_allocations
         self.sampler = sampler
         self.cancel = cancel
         self.complete = complete
+        self.client_queue = client_queue
         self.abort_on_error = abort_on_error
         self.profiling_enabled = self.cfg.opts("driver", "profiling")
         self.assertions_enabled = self.cfg.opts("driver", "assertions")
@@ -662,7 +663,7 @@ class AsyncIoAdapter:
                 params_per_task[task] = param_source
             schedule = schedule_for(task_allocation, params_per_task[task])
             async_executor = AsyncExecutor(
-                client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error)
+                client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error), self.client_queue
             )
             final_executor = AsyncProfiler(async_executor) if self.profiling_enabled else async_executor
             aws.append(final_executor())
@@ -713,7 +714,7 @@ class AsyncProfiler:
 
 
 class AsyncExecutor:
-    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error):
+    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error, client_queue):
         """
         Executes tasks according to the schedule for a given operation.
 
@@ -733,6 +734,7 @@ class AsyncExecutor:
         self.sampler = sampler
         self.cancel = cancel
         self.complete = complete
+        self.client_queue = client_queue
         self.on_error = on_error
         self.logger = logging.getLogger(__name__)
 
@@ -840,6 +842,7 @@ class AsyncExecutor:
                     self.client_id,
                 )
                 self.complete.set()
+                self.client_queue.put(self.client_id)
             elif any_task_completes_parent:
                 self.logger.info(
                     "Task [%s] completes parent. Client id [%s] is finished executing it and signals completion of all "

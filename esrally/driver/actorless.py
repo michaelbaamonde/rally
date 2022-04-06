@@ -9,6 +9,8 @@ import threading
 import time
 from enum import Enum
 
+from concurrent.futures import ProcessPoolExecutor
+
 from esrally import (
     PROGRAM_NAME,
     client,
@@ -98,23 +100,27 @@ class TrackPreparationWorker:
         load_track_plugins(self.cfg, self.track.name, register_track_processor=self.register_track, force_update=True)
         self.parallel_on_prepare()
 
-def initialize_worker(cfg, track, cancel, complete):
+def initialize_worker(cfg, track, cancel, complete, client_queue):
     execute_task.cfg = cfg
     execute_task.track = track
     execute_task.cancel = cancel
     execute_task.complete = complete
+    execute_task.client_queue = client_queue
     execute_task.on_error = cfg.opts("driver", "on.error")
     execute_task.sample_queue_size = int(cfg.opts("reporting", "sample.queue.size", mandatory=False, default_value=1 << 20))
 
-def execute_task(worker_id, tasks):
+
+def execute_task(inputs):
+    worker_id, tasks = inputs
     f = execute_task
-    time.sleep(0)
     print(f"worker_{worker_id}: executing {tasks}")
+#    print(f"worker_{worker_id}: client_ids: {[t.client_id for t in tasks]}")
     if tasks:
         sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=f.sample_queue_size)
-        AsyncIoAdapter(f.cfg, f.track, tasks, sampler, f.cancel, f.complete, f.on_error).__call__()
+        AsyncIoAdapter(f.cfg, f.track, tasks, sampler, f.cancel, f.complete, f.on_error, f.client_queue).__call__()
         samples = sampler.samples
         return (worker_id, time.perf_counter, samples)
+
 
 class SingleNodeDriver:
     class Status(Enum):
@@ -152,6 +158,8 @@ class SingleNodeDriver:
         self.status = self.Status.INITIALIZING
 
         self.complete = self.manager.Event()
+        self.cancel = self.manager.Event()
+        self.client_queue = self.manager.JoinableQueue()
 
     def create_es_clients(self):
         all_hosts = self.cfg.opts("client", "hosts").all_hosts
@@ -265,7 +273,7 @@ class SingleNodeDriver:
         self.allocations = allocator.allocations
         self.number_of_steps = len(allocator.join_points) - 1
         self.tasks_per_join_point = allocator.tasks_per_joinpoint
-        self.client_allocations_per_join_point = None
+        self.completing_join_points = None
 
         self.logger.info("Benchmark consists of [%d] steps executed by [%d] clients.", self.number_of_steps, len(self.allocations))
         # avoid flooding the log if there are too many clients
@@ -312,61 +320,77 @@ class SingleNodeDriver:
             print(f"coordinator: all tasks complete for step {step}")
             self.sample_post_processor(samples)
             self.reset_relative_time()
+            self.cancel.clear()
+            self.complete.clear()
             m = self.metrics_store.to_externalizable(clear=True)
             self.benchmark_coordinator.on_task_finished(m)
 
-        def signal_completion(result):
-            self.complete.set()
-
-        def run_task_loops(workers, allocations):
+        def run_task_loops(allocations):
             steps = self.number_of_steps * 2 + 1
             tasks_per_step = []
+            completing_joinpoints = {}
 
-            for step in range(steps):
+            task_idx = 0
+            for step in range(1, steps, 2):
                 tasks = []
-                allocs = set()
-                for worker_id in range(8):
-                    ta = allocations[worker_id]
-                    if not ta.is_joinpoint(step):
-                        allocs.add(ta)
-                    for alloc in allocs:
-                        t = alloc.tasks(step)
-                        tasks.append((worker_id, ta.tasks(step)))
-                if tasks:
-                    tasks_per_step.append(tasks)
 
-            pool = multiprocessing.Pool(processes=self.cores,
-                                        maxtasksperchild=1,
-                                        initializer=initialize_worker,
-                                        initargs=(self.cfg, self.track, self.manager.Event(), self.manager.Event()))
+                for worker_id, allocation in self.client_allocations_per_worker.items():
+                    if not allocation.is_joinpoint(step):
+                        tasks.append((worker_id, allocation.tasks(step)))
+                        # Next step will be a joinpoint corresponding to this task index
+                        joinpoint = allocation.tasks(step + 1)[0].task
+                        if joinpoint.preceding_task_completes_parent or joinpoint.any_task_completes_parent:
+                            completing_joinpoints[task_idx] = joinpoint
+                        else:
+                            completing_joinpoints[task_idx] = None
+                tasks_per_step.append(tasks)
+                task_idx += 1
+
+            pool = ProcessPoolExecutor(initializer=initialize_worker,
+                                       initargs=(self.cfg,
+                                                 self.track,
+                                                 self.cancel,
+                                                 self.complete,
+                                                 self.client_queue))
 
             with pool:
                 for step, tasks in enumerate(tasks_per_step):
-                    inputs = [(w, t) for w, t in tasks if t]
-                    # TODO: We'll need to use apply_async for the callback to
-                    # execute on *each* function invocation. Another (maybe
-                    # better) option is to ditch this callback mechanism and
-                    # just have execute_task() call signal_completion()
-                    # directly.
-                    samples = pool.starmap_async(execute_task, inputs, callback=signal_completion)
-                    if step == 3:
-                        self.complete.wait()
-                        print(f"coordinator: Cancelling tasks")
-                    samples.wait()
+                    inputs = [(worker, task) for worker, task in tasks if task]
+                    exit_condition = completing_joinpoints[step]
+                    # Submit tasks asynchronously to the process pool
+                    results = pool.map(execute_task, inputs)
+                    # We're now at a virtual "join point"
+                    if exit_condition:
+                        if exit_condition.preceding_task_completes_parent:
+                            print(f"coordinator: Specific task completes. Waiting for all clients of that task to complete.")
+                            pending = exit_condition.clients_executing_completing_task
+                            finished = []
+                            while not all(client in finished for client in pending):
+                                print(f"Waiting on {len(set(pending) ^ set(finished))} pending clients.")
+                                finished.append(self.client_queue.get())
+                            print(f"coordinator: All clients complete. Cancelling in-flight tasks.")
+                            self.cancel.set()
+                        elif exit_condition.any_task_completes_parent:
+                            print(f"coordinator: Any task completes. Waiting for first task to complete.")
+                            self.complete.wait()
+                            print(f"coordinator: Fist task complete. Cancelling remaining tasks.")
+                            self.cancel.set()
                     raw_samples = []
-                    for worker_id, worker_timestamp, sample in samples.get():
+                    for worker_id, worker_timestamp, sample in results:
                         raw_samples += sample
                     complete_task(raw_samples, step)
                 complete_benchmark()
 
-        run_task_loops((range(self.cores)), self.client_allocations_per_worker)
+            print(completing_joinpoints)
+
+        run_task_loops(self.client_allocations_per_worker)
 
     def execute(self):
         self.benchmark_coordinator.setup()
         self.prepare_benchmark()
         self.prepare_track(self.cfg, self.track)
         # Hard-code these for now, since we're not hooked up to the racecontrol machinery yet
-        self.benchmark_coordinator.on_preparation_complete("basic", "7.15.1", "master")
+        self.benchmark_coordinator.on_preparation_complete("basic", "7.17.0", "master")
         self.reset_relative_time()
         self.start_telemetry_devices()
         self.allocate_workers()
