@@ -297,17 +297,6 @@ class SingleNodeDriver:
                     self.client_allocations_per_worker[worker_id] = client_allocations
                     worker_id += 1
 
-    def prepare_track(self, cfg, track):
-        registry = TrackProcessorRegistry(cfg)
-        track_preparator = TrackPreparationWorker(cfg, track, registry, self.track_preparation_queue, self.cores)
-        track_preparator.prepare_track()
-
-    def complete_task(self, samples):
-        self.sample_post_processor(samples)
-        self.reset_relative_time()
-        m = self.metrics_store.to_externalizable(clear=True)
-        self.benchmark_coordinator.on_task_finished(m)
-
     def rebuild_schedule(self):
         # We do some hackery here to translate the current allocation matrix implementation into
         # a structure more amenable to this new approach where join points are essentially implicit.
@@ -338,89 +327,74 @@ class SingleNodeDriver:
         self.schedule = tasks_per_step
         self.early_exits = early_exits
 
-    def run(self):
-        def complete_benchmark():
-            print(f"coordinator: All steps completed.")
-            m = self.metrics_store.to_externalizable(clear=True)
-            print(f"coordinator: Closing metrics store...")
-            self.metrics_store.close()
-            # immediately clear as we don't need it anymore and it can consume a significant amount of memory
-            self.metrics_store = None
-            print(f"coordinator: Sending results to benchmark coordinator...")
-            self.benchmark_coordinator.on_benchmark_complete(m)
+    def prepare_track(self, cfg, track):
+        registry = TrackProcessorRegistry(cfg)
+        track_preparator = TrackPreparationWorker(cfg, track, registry, self.track_preparation_queue, self.cores)
+        track_preparator.prepare_track()
 
-        def complete_task(samples, step):
-            print(f"coordinator: All tasks complete for step {step}")
-            self.sample_post_processor(samples)
-            self.reset_relative_time()
-            self.cancel.clear()
-            self.complete.clear()
-            m = self.metrics_store.to_externalizable(clear=True)
-            self.benchmark_coordinator.on_task_finished(m)
+    def complete_task(self, samples, step):
+        print(f"coordinator: All tasks complete for step {step}")
+        self.sample_post_processor(samples)
+        self.reset_relative_time()
+        self.cancel.clear()
+        self.complete.clear()
+        m = self.metrics_store.to_externalizable(clear=True)
+        self.benchmark_coordinator.on_task_finished(m)
 
-        def run_task_loops(allocations):
-            # # We do some hackery here to translate the current allocation matrix implementation into
-            # # a structure more amenable to this new approach where join points are essentially implicit.
-            # steps = self.number_of_steps * 2 + 1
-            # # We're going to build up a list of non-joinpoint tasks per step of the benchmark
-            # tasks_per_step = []
-            # # And also keep track of which steps have an "early exit" condition, i.e. can be completed
-            # # by another task executing in parallel
-            # early_exits = {}
+    def run_tasks(self):
+        def handle_any_task_completes():
+            print(f"coordinator: Any task completes this step.")
+            print(f"coordinator: Waiting for at least one task to complete.")
+            self.complete.wait()
+            print(f"coordinator: At least one task complete.")
+            self.cancel.set()
+            print(f"coordinator: Remaining tasks cancelled.")
 
-            # step_idx = 0
-            # # Every odd step is a "real" task (i.e. not a joinpoint)...
-            # for step in range(1, steps, 2):
-            #     tasks = []
-            #     for worker_id, allocation in self.client_allocations_per_worker.items():
-            #         if not allocation.is_joinpoint(step):
-            #             tasks.append((worker_id, allocation.tasks(step)))
-            #             # ...but the corresponding joinpoint (i.e. the next step) has information we need:
-            #             # namely, the conditions for completing the current task if it's in a parallel block.
-            #             joinpoint = allocation.tasks(step + 1)[0].task
-            #             if joinpoint.preceding_task_completes_parent or joinpoint.any_task_completes_parent:
-            #                 early_exits[step_idx] = joinpoint
-            #             else:
-            #                 early_exits[step_idx] = None
-            #     tasks_per_step.append(tasks)
-            #     step_idx += 1
+        def handle_preceding_task_completes():
+            print(f"coordinator: A specific task completes this step.")
+            print(f"coordinator: Waiting for all clients of that task to finish.")
+            pending = exit_condition.clients_executing_completing_task
+            finished = []
+            while not all(client in finished for client in pending):
+                print(f"coordinator: Waiting on {len(set(pending) ^ set(finished))} pending clients.")
+                finished.append(self.client_queue.get())
+            print(f"coordinator: All clients complete. Cancelling in-flight tasks.")
+            self.cancel.set()
 
-            pool = ProcessPoolExecutor(initializer=initialize_worker,
-                                       initargs=(self.cfg,
-                                                 self.track,
-                                                 self.cancel,
-                                                 self.complete,
-                                                 self.client_queue))
+        pool = ProcessPoolExecutor(initializer=initialize_worker,
+                                   initargs=(self.cfg,
+                                             self.track,
+                                             self.cancel,
+                                             self.complete,
+                                             self.client_queue))
 
-            with pool:
-                for step, tasks in enumerate(self.schedule):
-                    inputs = [(worker, task) for worker, task in tasks if task]
-                    exit_condition = self.early_exits[step]
-                    # Submit tasks asynchronously to the process pool
-                    results = pool.map(execute_task, inputs)
-                    # We're now at a virtual "join point"
-                    if exit_condition:
-                        if exit_condition.preceding_task_completes_parent:
-                            print(f"coordinator: Specific task completes. Waiting for all clients of that task to complete.")
-                            pending = exit_condition.clients_executing_completing_task
-                            finished = []
-                            while not all(client in finished for client in pending):
-                                print(f"coordinator: Waiting on {len(set(pending) ^ set(finished))} pending clients.")
-                                finished.append(self.client_queue.get())
-                            print(f"coordinator: All clients complete. Cancelling in-flight tasks.")
-                            self.cancel.set()
-                        elif exit_condition.any_task_completes_parent:
-                            print(f"coordinator: Any task completes. Waiting for first task to complete.")
-                            self.complete.wait()
-                            print(f"coordinator: Fist task complete. Cancelling remaining tasks.")
-                            self.cancel.set()
-                    raw_samples = []
-                    for worker_id, worker_timestamp, sample in results:
-                        raw_samples += sample
-                    complete_task(raw_samples, step)
-                complete_benchmark()
+        with pool:
+            for step, tasks in enumerate(self.schedule):
+                inputs = [(worker, task) for worker, task in tasks if task]
+                exit_condition = self.early_exits[step]
+                # Submit tasks asynchronously to the process pool
+                results = pool.map(execute_task, inputs)
+                # We're now at a virtual "join point": all tasks have been submitted
+                # to the pool of workers
+                if exit_condition:
+                    if exit_condition.preceding_task_completes_parent:
+                        handle_preceding_task_completes()
+                    elif exit_condition.any_task_completes_parent:
+                        handle_any_task_completes()
+                raw_samples = []
+                for worker_id, worker_timestamp, sample in results:
+                    raw_samples += sample
+                self.complete_task(raw_samples, step)
 
-        run_task_loops(self.client_allocations_per_worker)
+    def complete_benchmark(self):
+        print(f"coordinator: All steps completed.")
+        m = self.metrics_store.to_externalizable(clear=True)
+        print(f"coordinator: Closing metrics store...")
+        self.metrics_store.close()
+        # immediately clear as we don't need it anymore and it can consume a significant amount of memory
+        self.metrics_store = None
+        print(f"coordinator: Sending results to benchmark coordinator...")
+        self.benchmark_coordinator.on_benchmark_complete(m)
 
     def execute(self):
         self.benchmark_coordinator.setup()
@@ -432,8 +406,8 @@ class SingleNodeDriver:
         self.start_telemetry_devices()
         self.allocate_workers()
         self.rebuild_schedule()
-        self.run()
-
+        self.run_tasks()
+        self.complete_benchmark()
 
 def race(cfg):
     number_of_drivers = len(cfg.opts("driver", "load_driver_hosts")) == 1
