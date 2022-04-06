@@ -326,26 +326,31 @@ class SingleNodeDriver:
             self.benchmark_coordinator.on_task_finished(m)
 
         def run_task_loops(allocations):
-            steps = self.number_of_steps * 2 + 1
-            tasks_per_step = []
-            completing_joinpoints = {}
-
             # We do some hackery here to translate the current allocation matrix implementation into
             # a structure more amenable to this new approach where join points are essentially implicit.
-            task_idx = 0
+            steps = self.number_of_steps * 2 + 1
+            # We're going to build up a list of non-joinpoint tasks per step of the benchmark
+            tasks_per_step = []
+            # And also keep track of which steps have an "early exit" condition, i.e. can be completed
+            # by another task executing in parallel
+            early_exits = {}
+
+            step_idx = 0
+            # Every odd step is a "real" task (i.e. not a joinpoint)...
             for step in range(1, steps, 2):
                 tasks = []
                 for worker_id, allocation in self.client_allocations_per_worker.items():
                     if not allocation.is_joinpoint(step):
                         tasks.append((worker_id, allocation.tasks(step)))
-                        # Next step will be a joinpoint corresponding to this task index
+                        # ...but the corresponding joinpoint (i.e. the next step) has information we need:
+                        # namely, the conditions for completing the current task if it's in a parallel block.
                         joinpoint = allocation.tasks(step + 1)[0].task
                         if joinpoint.preceding_task_completes_parent or joinpoint.any_task_completes_parent:
-                            completing_joinpoints[task_idx] = joinpoint
+                            early_exits[step_idx] = joinpoint
                         else:
-                            completing_joinpoints[task_idx] = None
+                            early_exits[step_idx] = None
                 tasks_per_step.append(tasks)
-                task_idx += 1
+                step_idx += 1
 
             pool = ProcessPoolExecutor(initializer=initialize_worker,
                                        initargs=(self.cfg,
@@ -357,7 +362,7 @@ class SingleNodeDriver:
             with pool:
                 for step, tasks in enumerate(tasks_per_step):
                     inputs = [(worker, task) for worker, task in tasks if task]
-                    exit_condition = completing_joinpoints[step]
+                    exit_condition = early_exits[step]
                     # Submit tasks asynchronously to the process pool
                     results = pool.map(execute_task, inputs)
                     # We're now at a virtual "join point"
