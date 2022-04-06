@@ -7,9 +7,8 @@ import random
 import sys
 import threading
 import time
-from enum import Enum
-
 from concurrent.futures import ProcessPoolExecutor
+from enum import Enum
 
 from esrally import (
     PROGRAM_NAME,
@@ -100,6 +99,7 @@ class TrackPreparationWorker:
         load_track_plugins(self.cfg, self.track.name, register_track_processor=self.register_track, force_update=True)
         self.parallel_on_prepare()
 
+
 def initialize_worker(cfg, track, cancel, complete, client_queue):
     execute_task.cfg = cfg
     execute_task.track = track
@@ -114,7 +114,6 @@ def execute_task(inputs):
     worker_id, tasks = inputs
     f = execute_task
     print(f"worker_{worker_id}: executing {tasks}")
-#    print(f"worker_{worker_id}: client_ids: {[t.client_id for t in tasks]}")
     if tasks:
         sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=f.sample_queue_size)
         AsyncIoAdapter(f.cfg, f.track, tasks, sampler, f.cancel, f.complete, f.on_error, f.client_queue).__call__()
@@ -249,7 +248,7 @@ class SingleNodeDriver:
 
         # Avoid issuing any requests to the target cluster when static responses are enabled. The results
         # are not useful and attempts to connect to a non-existing cluster just lead to exception traces in logs.
-        self.prepare_telemetry(es_clients, enable= not uses_static_responses)
+        self.prepare_telemetry(es_clients, enable=not uses_static_responses)
 
         track.set_absolute_data_path(self.cfg, self.track)
         runner.register_default_runners()
@@ -361,12 +360,9 @@ class SingleNodeDriver:
             print(f"coordinator: All clients complete. Cancelling in-flight tasks.")
             self.cancel.set()
 
-        pool = ProcessPoolExecutor(initializer=initialize_worker,
-                                   initargs=(self.cfg,
-                                             self.track,
-                                             self.cancel,
-                                             self.complete,
-                                             self.client_queue))
+        pool = ProcessPoolExecutor(
+            initializer=initialize_worker, initargs=(self.cfg, self.track, self.cancel, self.complete, self.client_queue)
+        )
 
         with pool:
             for step, tasks in enumerate(self.schedule):
@@ -408,6 +404,7 @@ class SingleNodeDriver:
         self.rebuild_schedule()
         self.run_tasks()
         self.complete_benchmark()
+
 
 def race(cfg):
     number_of_drivers = len(cfg.opts("driver", "load_driver_hosts")) == 1
