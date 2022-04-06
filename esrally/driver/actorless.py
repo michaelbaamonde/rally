@@ -330,6 +330,8 @@ class SingleNodeDriver:
             tasks_per_step = []
             completing_joinpoints = {}
 
+            # We do some hackery here to translate the current allocation matrix implementation into
+            # a structure more amenable to this new approach where join points are essentially implicit.
             task_idx = 0
             for step in range(1, steps, 2):
                 tasks = []
