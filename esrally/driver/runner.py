@@ -195,6 +195,7 @@ class Runner:
             "opaque_id": "opaque-id",
             "params": "request-params",
             "request_timeout": "request-timeout",
+            "api_key": "api_key",
         }
         full_result = {k: params.get(v) for (k, v) in kw_dict.items()}
         # filter Nones

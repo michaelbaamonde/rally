@@ -139,7 +139,7 @@ class StartWorker:
     Starts a worker.
     """
 
-    def __init__(self, worker_id, config, track, client_allocations):
+    def __init__(self, worker_id, config, track, client_allocations, client_contexts):
         """
         :param worker_id: Unique (numeric) id of the worker.
         :param config: Rally internal configuration object.
@@ -150,6 +150,7 @@ class StartWorker:
         self.config = config
         self.track = track
         self.client_allocations = client_allocations
+        self.client_contexts = client_contexts
 
 
 class Drive:
@@ -305,8 +306,8 @@ class DriverActor(actor.RallyActor):
         self.send(worker, Bootstrap(cfg))
         return worker
 
-    def start_worker(self, driver, worker_id, cfg, track, allocations):
-        self.send(driver, StartWorker(worker_id, cfg, track, allocations))
+    def start_worker(self, driver, worker_id, cfg, track, allocations, client_contexts={}):
+        self.send(driver, StartWorker(worker_id, cfg, track, allocations, client_contexts))
 
     def drive_at(self, driver, client_start_timestamp):
         self.send(driver, Drive(client_start_timestamp))
@@ -635,6 +636,12 @@ class Driver:
             self.logger.exception("Could not retrieve cluster info on benchmark start")
             return None
 
+    def create_api_key(self, es, client_id):
+        self.logger.info(f"Creating ES API key for client {client_id}.")
+        api_key = client.create_api_key(es["default"], client_id)
+        self.logger.info(f"ES API key created for client {client_id}.")
+        return api_key
+
     def prepare_benchmark(self, t):
         self.track = t
         self.challenge = select_challenge(self.config, self.track)
@@ -681,6 +688,7 @@ class Driver:
 
         self.target.prepare_track([h["host"] for h in self.load_driver_hosts], self.config, self.track)
 
+
     def start_benchmark(self):
         self.logger.info("Benchmark is about to start.")
         # ensure relative time starts when the benchmark starts.
@@ -699,6 +707,11 @@ class Driver:
         if allocator.clients < 128:
             self.logger.info("Allocation matrix:\n%s", "\n".join([str(a) for a in self.allocations]))
 
+
+        create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("api_key_authentication", None)
+        if create_api_keys:
+            es_clients = self.create_es_clients()
+
         worker_assignments = calculate_worker_assignments(self.load_driver_hosts, allocator.clients)
         worker_id = 0
         for assignment in worker_assignments:
@@ -710,10 +723,16 @@ class Driver:
                     worker = self.target.create_client(host, self.config)
 
                     client_allocations = ClientAllocations()
+                    client_contexts = {}
                     for client_id in clients:
+                        # Bookkeeping
                         client_allocations.add(client_id, self.allocations[client_id])
                         self.clients_per_worker[client_id] = worker_id
-                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations)
+                        # API key stuff
+                        if create_api_keys:
+                            api_key = self.create_api_key(es_clients, client_id)
+                            client_contexts[client_id] = {"api_key": api_key["encoded"]}
+                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations, client_contexts)
                     self.workers.append(worker)
                     worker_id += 1
 
@@ -1113,6 +1132,7 @@ class Worker(actor.RallyActor):
         self.config = None
         self.track = None
         self.client_allocations = None
+        self.client_contexts = None
         self.current_task_index = 0
         self.next_task_index = 0
         self.on_error = None
@@ -1144,6 +1164,7 @@ class Worker(actor.RallyActor):
         self.track = msg.track
         track.set_absolute_data_path(self.config, self.track)
         self.client_allocations = msg.client_allocations
+        self.client_contexts = msg.client_contexts
         self.current_task_index = 0
         self.cancel.clear()
         # we need to wake up more often in test mode
@@ -1270,7 +1291,7 @@ class Worker(actor.RallyActor):
                 self.logger.info("Worker[%d] is executing tasks at index [%d].", self.worker_id, self.current_task_index)
                 self.sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=self.sample_queue_size)
                 executor = AsyncIoAdapter(
-                    self.config, self.track, task_allocations, self.sampler, self.cancel, self.complete, self.on_error
+                    self.config, self.track, task_allocations, self.sampler, self.cancel, self.complete, self.on_error, self.client_contexts
                 )
 
                 self.executor_future = self.pool.submit(executor)
@@ -1623,7 +1644,7 @@ class ThroughputCalculator:
 
 
 class AsyncIoAdapter:
-    def __init__(self, cfg, track, task_allocations, sampler, cancel, complete, abort_on_error):
+    def __init__(self, cfg, track, task_allocations, sampler, cancel, complete, abort_on_error, client_contexts):
         self.cfg = cfg
         self.track = track
         self.task_allocations = task_allocations
@@ -1631,6 +1652,7 @@ class AsyncIoAdapter:
         self.cancel = cancel
         self.complete = complete
         self.abort_on_error = abort_on_error
+        self.client_contexts = client_contexts
         self.profiling_enabled = self.cfg.opts("driver", "profiling")
         self.assertions_enabled = self.cfg.opts("driver", "assertions")
         self.debug_event_loop = self.cfg.opts("system", "async.debug", mandatory=False, default_value=False)
@@ -1679,8 +1701,9 @@ class AsyncIoAdapter:
                 param_source = track.operation_parameters(self.track, task)
                 params_per_task[task] = param_source
             schedule = schedule_for(task_allocation, params_per_task[task])
+            client_context = self.client_contexts.get(client_id, {})
             async_executor = AsyncExecutor(
-                client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error)
+                client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error), client_context
             )
             final_executor = AsyncProfiler(async_executor) if self.profiling_enabled else async_executor
             aws.append(final_executor())
@@ -1731,7 +1754,7 @@ class AsyncProfiler:
 
 
 class AsyncExecutor:
-    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error):
+    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error, client_context={}):
         """
         Executes tasks according to the schedule for a given operation.
 
@@ -1742,6 +1765,7 @@ class AsyncExecutor:
         :param cancel: A shared boolean that indicates we need to cancel execution.
         :param complete: A shared boolean that indicates we need to prematurely complete execution.
         :param on_error: A string specifying how the load generator should behave on errors.
+        :param client_context: A ClientContext object
         """
         self.client_id = client_id
         self.task = task
@@ -1752,7 +1776,10 @@ class AsyncExecutor:
         self.cancel = cancel
         self.complete = complete
         self.on_error = on_error
+        self.client_context = client_context
+        self.api_key = client_context.get("api_key", None)
         self.logger = logging.getLogger(__name__)
+
 
     async def __call__(self, *args, **kwargs):
         any_task_completes_parent = self.task.any_completes_parent
@@ -1772,6 +1799,9 @@ class AsyncExecutor:
         # noinspection PyBroadException
         try:
             async for expected_scheduled_time, sample_type, percent_completed, runner, params in schedule:
+                if self.api_key is not None:
+                    params["api_key"] = self.api_key
+
                 if self.cancel.is_set():
                     self.logger.info("User cancelled execution.")
                     break

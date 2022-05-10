@@ -314,3 +314,16 @@ def wait_for_rest_layer(es, max_attempts=40):
                 logger.warning("Got unexpected status code [%s] on attempt [%s].", e.status_code, attempt)
                 raise e
     return False
+
+def create_api_key(es, client_id, max_attempts=5):
+    logger = logging.getLogger(__name__)
+
+    for attempt in range(max_attempts):
+        # pylint: disable=import-outside-toplevel
+        import elasticsearch
+        try:
+            api_key = es.security.create_api_key({"name": f"rally-client-{client_id}"})
+            return api_key
+        except elasticsearch.TransportError as e:
+            logger.debug(f"Got status code {e.status_code} on attempt {attempt} of {max_attempts}. Retrying...")
+            time.sleep(1)
