@@ -145,6 +145,7 @@ class StartWorker:
         :param config: Rally internal configuration object.
         :param track: The track to use.
         :param client_allocations: A structure describing which clients need to run which tasks.
+        :param client_contexts: A dict keyed by client ID containing arbitrary client metadata
         """
         self.worker_id = worker_id
         self.config = config
@@ -561,6 +562,7 @@ class Driver:
         self.workers = []
         # which client ids are assigned to which workers?
         self.clients_per_worker = {}
+        self.client_contexts = {}
 
         self.progress_reporter = console.progress()
         self.progress_counter = 0
@@ -708,7 +710,7 @@ class Driver:
             self.logger.info("Allocation matrix:\n%s", "\n".join([str(a) for a in self.allocations]))
 
 
-        create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("api_key_authentication", None)
+        create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("create_api_key_per_client", None)
         if create_api_keys:
             es_clients = self.create_es_clients()
 
@@ -723,7 +725,7 @@ class Driver:
                     worker = self.target.create_client(host, self.config)
 
                     client_allocations = ClientAllocations()
-                    client_contexts = {}
+                    worker_client_contexts = {}
                     for client_id in clients:
                         # Bookkeeping
                         client_allocations.add(client_id, self.allocations[client_id])
@@ -731,8 +733,9 @@ class Driver:
                         # API key stuff
                         if create_api_keys:
                             api_key = self.create_api_key(es_clients, client_id)
-                            client_contexts[client_id] = {"api_key": api_key["encoded"]}
-                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations, client_contexts)
+                            worker_client_contexts[client_id] = {"api_key": api_key["encoded"]}
+                            self.client_contexts[worker_id] = worker_client_contexts
+                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations, worker_client_contexts)
                     self.workers.append(worker)
                     worker_id += 1
 
