@@ -475,6 +475,8 @@ class BulkIndex(Runner):
         * ``timeout``: a time unit value indicating the server-side timeout for the operation
         * ``request-timeout``: a non-negative float indicating the client-side timeout for the operation.  If not present, defaults to
          ``None`` and potentially falls back to the global timeout setting.
+        * ``api_key``: A base64-encoded Elasticsearch API key used for authentication on a per-request basis. Overrides any basic auth configured
+        via the provided es client object.
         """
         detailed_results = params.get("detailed-results", False)
         api_key = params.get("api_key", None)
