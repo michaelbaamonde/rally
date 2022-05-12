@@ -137,17 +137,19 @@ def test_eventdata_daily_volume(cfg, test_cluster):
     track_params = "bulk_indexing_clients:1,number_of_replicas:0,daily_logging_volume:1MB"
     execute_eventdata(cfg, test_cluster, challenges, track_params)
 
-# @it.random_rally_config
-# def test_create_api_key_per_client(cfg):
-#     assert (
-#         it.race(
-#             cfg,
-#             f'--distribution-version=7.17.0 --track="geonames" --test-mode '
-#             f"--car=4gheap,trial-license,x-pack-security --target-hosts=127.0.0.1:39200"
-#             f"--client-options:use_ssl:true,verify_certs:false,basic_auth_user:'rally',basic_auth_password:'rally-password',create_api_key_per_client:true",
-#         )
-#         == 0
-#     )
+@it.random_rally_config
+def test_create_api_key_per_client(cfg):
+    port = 19200
+    it.wait_until_port_is_free(port_number=port)
+    assert (
+        it.race(
+            cfg,
+            f'--distribution-version="7.17.0" --track="geonames" '
+            f"--test-mode --car=4gheap,trial-license,x-pack-security --target-hosts=127.0.0.1:{port} "
+            f"--client-options=use_ssl:true,verify_certs:false,basic_auth_user:'rally',basic_auth_password:'rally-password',create_api_key_per_client:true",
+        )
+        == 0
+    )
 
 def execute_eventdata(cfg, test_cluster, challenges, track_params):
     for challenge in challenges:
