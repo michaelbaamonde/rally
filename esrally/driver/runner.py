@@ -195,7 +195,6 @@ class Runner:
             "opaque_id": "opaque-id",
             "params": "request-params",
             "request_timeout": "request-timeout",
-            "api_key": "api_key",
         }
         full_result = {k: params.get(v) for (k, v) in kw_dict.items()}
         # filter Nones
@@ -478,6 +477,7 @@ class BulkIndex(Runner):
          ``None`` and potentially falls back to the global timeout setting.
         """
         detailed_results = params.get("detailed-results", False)
+        api_key = params.get("api_key", None)
         api_kwargs = self._default_kw_params(params)
 
         bulk_params = {}
@@ -497,9 +497,9 @@ class BulkIndex(Runner):
         if with_action_metadata:
             api_kwargs.pop("index", None)
             # only half of the lines are documents
-            response = await es.bulk(params=bulk_params, **api_kwargs)
+            response = await es.bulk(params=bulk_params, api_key=api_key, **api_kwargs)
         else:
-            response = await es.bulk(doc_type=params.get("type"), params=bulk_params, **api_kwargs)
+            response = await es.bulk(doc_type=params.get("type"), params=bulk_params, api_key=api_key, **api_kwargs)
 
         stats = self.detailed_stats(params, response) if detailed_results else self.simple_stats(bulk_size, unit, response)
 
