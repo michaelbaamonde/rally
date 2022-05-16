@@ -3136,7 +3136,7 @@ class TestDeleteComposableTemplateRunner:
                 mock.call(name="templateB", params=params["request-params"], ignore=[404]),
             ]
         )
-        es.indices.delete.assert_awaited_once_with(index="logs-*")
+        es.indices.delete.assert_awaited_once_with(index="logs-*", params=params["request-params"])
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async
