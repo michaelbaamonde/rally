@@ -3686,7 +3686,7 @@ class TestCreateSnapshotRepository:
         await r(es, params)
 
         es.snapshot.create_repository.assert_called_once_with(
-            repository="backups", body={"type": "fs", "settings": {"location": "/var/backups"}}, params={}
+            repository="backups", body={"type": "fs", "settings": {"location": "/var/backups"}}
         )
 
 

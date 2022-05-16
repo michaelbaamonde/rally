@@ -1838,7 +1838,8 @@ class DeleteSnapshotRepository(Runner):
     """
 
     async def __call__(self, es, params):
-        await es.snapshot.delete_repository(repository=mandatory(params, "repository", repr(self)))
+        es_api_kwargs, _ = self._extract_params(params, required_api_params=["repository"])
+        await es.snapshot.delete_repository(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "delete-snapshot-repository"
@@ -1850,10 +1851,8 @@ class CreateSnapshotRepository(Runner):
     """
 
     async def __call__(self, es, params):
-        request_params = params.get("request-params", {})
-        await es.snapshot.create_repository(
-            repository=mandatory(params, "repository", repr(self)), body=mandatory(params, "body", repr(self)), params=request_params
-        )
+        es_api_kwargs, _ = self._extract_params(params, required_api_params=["repository", "body"])
+        await es.snapshot.create_repository(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "create-snapshot-repository"
@@ -1865,13 +1864,11 @@ class CreateSnapshot(Runner):
     """
 
     async def __call__(self, es, params):
-        wait_for_completion = params.get("wait-for-completion", False)
-        repository = mandatory(params, "repository", repr(self))
-        snapshot = mandatory(params, "snapshot", repr(self))
-        # just assert, gets set in _default_kw_params
-        mandatory(params, "body", repr(self))
-        api_kwargs = self._default_kw_params(params)
-        await es.snapshot.create(repository=repository, snapshot=snapshot, wait_for_completion=wait_for_completion, **api_kwargs)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["repository", "body", "snapshot"])
+        # TODO: Good example of how this es_api vs runner_param distinction isn't quite right
+        es_api_kwargs["wait_for_completion"] = runner_params.get("wait-for-completion", False)
+
+        await es.snapshot.create(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "create-snapshot"
