@@ -2841,7 +2841,7 @@ class TestDeleteIndexTemplateRunner:
         es.indices.delete_template.assert_has_awaits(
             [mock.call(name="templateA", params=params["request-params"]), mock.call(name="templateB", params=params["request-params"])]
         )
-        es.indices.delete.assert_awaited_once_with(index="logs-*")
+        es.indices.delete.assert_awaited_once_with(index="logs-*", params=params["request-params"])
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async

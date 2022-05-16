@@ -1392,7 +1392,7 @@ class DeleteComposableTemplate(Runner):
         es_api_kwargs, runner_params = self._extract_params(params,
                                                             required_runner_params=["templates", "only-if-exists", "request-params"])
         templates = runner_params.get("templates")
-        only_if_exists = runner_params.get("only-if-exists")
+        only_if_exists = runner_params.get("only-if-exists", False)
 
         ops_count = 0
 
@@ -1425,10 +1425,12 @@ class CreateIndexTemplate(Runner):
     """
 
     async def __call__(self, es, params):
-        templates = mandatory(params, "templates", self)
-        request_params = params.get("request-params", {})
+        es_api_kwargs, runner_params = self._extract_params(params,
+                                                            required_runner_params=["templates"])
+        templates = runner_params.get("templates")
+
         for template, body in templates:
-            await es.indices.put_template(name=template, body=body, params=request_params)
+            await es.indices.put_template(name=template, body=body, **es_api_kwargs)
         return {
             "weight": len(templates),
             "unit": "ops",
@@ -1446,22 +1448,23 @@ class DeleteIndexTemplate(Runner):
     """
 
     async def __call__(self, es, params):
-        template_names = mandatory(params, "templates", self)
-        only_if_exists = params.get("only-if-exists", False)
-        request_params = params.get("request-params", {})
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["templates"])
+        template_names = runner_params.get("templates")
+        only_if_exists = runner_params.get("only-if-exists", False)
+
         ops_count = 0
 
         for template_name, delete_matching_indices, index_pattern in template_names:
             if not only_if_exists:
-                await es.indices.delete_template(name=template_name, params=request_params)
+                await es.indices.delete_template(name=template_name, **es_api_kwargs)
                 ops_count += 1
-            elif only_if_exists and await es.indices.exists_template(template_name):
+            elif only_if_exists and await es.indices.exists_template(template_name, **es_api_kwargs):
                 self.logger.info("Index template [%s] already exists. Deleting it.", template_name)
-                await es.indices.delete_template(name=template_name, params=request_params)
+                await es.indices.delete_template(name=template_name, **es_api_kwargs)
                 ops_count += 1
             # ensure that we do not provide an empty index pattern by accident
             if delete_matching_indices and index_pattern:
-                await es.indices.delete(index=index_pattern)
+                await es.indices.delete(index=index_pattern, **es_api_kwargs)
                 ops_count += 1
 
         return {
