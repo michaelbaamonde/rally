@@ -222,6 +222,9 @@ class Runner:
                     ret[required_param] = mandatory(params, required_param, self)
 
         es_api_params = self._default_kw_params(params)
+        # TODO: clean this up?
+        if es_api_params.get("request-params"):
+            es_api_params["params"] = es_api_params.pop("request-params")
         runner_params = {k: v for k, v in params.items() if k not in es_api_params}
 
         validate_params(params, required_api_params, es_api_params)
@@ -1265,17 +1268,19 @@ class DeleteDataStream(Runner):
     async def __call__(self, es, params):
         ops = 0
 
-        data_streams = mandatory(params, "data-streams", self)
-        only_if_exists = mandatory(params, "only-if-exists", self)
-        request_params = mandatory(params, "request-params", self)
+        es_api_kwargs, runner_params = self._extract_params(params,
+                                                            required_runner_params=["data-streams", "only-if-exists", "request-params"])
+
+        data_streams = runner_params.get("data-streams")
+        only_if_exists = runner_params.get("only-if-exists")
 
         for data_stream in data_streams:
             if not only_if_exists:
-                await es.indices.delete_data_stream(data_stream, ignore=[404], params=request_params)
+                await es.indices.delete_data_stream(data_stream, ignore=[404], **es_api_kwargs)
                 ops += 1
             elif only_if_exists and await es.indices.exists(index=data_stream):
                 self.logger.info("Data stream [%s] already exists. Deleting it.", data_stream)
-                await es.indices.delete_data_stream(data_stream, params=request_params)
+                await es.indices.delete_data_stream(data_stream, **es_api_kwargs)
                 ops += 1
 
         return {
