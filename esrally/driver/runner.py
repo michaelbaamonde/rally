@@ -1195,10 +1195,12 @@ class CreateDataStream(Runner):
     """
 
     async def __call__(self, es, params):
-        data_streams = mandatory(params, "data-streams", self)
-        request_params = mandatory(params, "request-params", self)
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["data-streams", "request-params"])
+        data_streams = runner_params.get("data-streams")
+        request_params = runner_params.get("request-params")
+
         for data_stream in data_streams:
-            await es.indices.create_data_stream(data_stream, params=request_params)
+            await es.indices.create_data_stream(data_stream, **es_api_kwargs)
         return {
             "weight": len(data_streams),
             "unit": "ops",
