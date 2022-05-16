@@ -215,6 +215,12 @@ class Runner:
             headers.update({"Authorization": f"ApiKey {api_key}"})
         return request_params, headers
 
+    def _extract_params(self, params, required=None):
+        es_api_params = self._default_kw_params(params)
+        if required is not None:
+            for mandatory_param in required:
+                es_api_params[mandatory_param] = mandatory(params, mandatory_param, self)
+        return es_api_params
 
 class Delegator:
     """
@@ -1129,12 +1135,8 @@ class PutPipeline(Runner):
     """
 
     async def __call__(self, es, params):
-        await es.ingest.put_pipeline(
-            id=mandatory(params, "id", self),
-            body=mandatory(params, "body", self),
-            master_timeout=params.get("master-timeout"),
-            timeout=params.get("timeout"),
-        )
+        es_api_params = self._extract_params(params, required=["id", "body"])
+        await es.ingest.put_pipeline(**es_api_params)
 
     def __repr__(self, *args, **kwargs):
         return "put-pipeline"

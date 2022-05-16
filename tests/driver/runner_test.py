@@ -2329,7 +2329,7 @@ class TestPutPipelineRunner:
 
         await r(es, params)
 
-        es.ingest.put_pipeline.assert_awaited_once_with(id="rename", body=params["body"], master_timeout=None, timeout=None)
+        es.ingest.put_pipeline.assert_awaited_once_with(id="rename", body=params["body"])
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async
