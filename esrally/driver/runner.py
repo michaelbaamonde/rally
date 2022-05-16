@@ -1931,13 +1931,11 @@ class RestoreSnapshot(Runner):
     """
 
     async def __call__(self, es, params):
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["repository", "snapshot"])
+        es_api_kwargs["wait_for_completion"] = runner_params.get("wait-for-completion", False)
+
         api_kwargs = self._default_kw_params(params)
-        await es.snapshot.restore(
-            repository=mandatory(params, "repository", repr(self)),
-            snapshot=mandatory(params, "snapshot", repr(self)),
-            wait_for_completion=params.get("wait-for-completion", False),
-            **api_kwargs,
-        )
+        await es.snapshot.restore(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "restore-snapshot"
@@ -2003,7 +2001,8 @@ class PutSettings(Runner):
     """
 
     async def __call__(self, es, params):
-        await es.cluster.put_settings(body=mandatory(params, "body", repr(self)))
+        es_api_kwargs, _ = self._extract_params(params, required_api_params=["body"])
+        await es.cluster.put_settings(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "put-settings"
@@ -2015,10 +2014,11 @@ class CreateTransform(Runner):
     """
 
     async def __call__(self, es, params):
-        transform_id = mandatory(params, "transform-id", self)
-        body = mandatory(params, "body", self)
-        defer_validation = params.get("defer-validation", False)
-        await es.transform.put_transform(transform_id=transform_id, body=body, defer_validation=defer_validation)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["body", "transform-id"])
+        # TODO: snake_caseify in _extract_params()?
+        es_api_kwargs["transform_id"] = es_api_kwargs.pop("transform-id")
+        es_api_kwargs["defer_validation"] = runner_params.get("defer-validation", False)
+        await es.transform.put_transform(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "create-transform"
@@ -2031,10 +2031,11 @@ class StartTransform(Runner):
     """
 
     async def __call__(self, es, params):
-        transform_id = mandatory(params, "transform-id", self)
-        timeout = params.get("timeout")
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["transform-id"])
+        es_api_kwargs["transform_id"] = es_api_kwargs.pop("transform-id")
+        es_api_kwargs["timeout"] = runner_params.get("timeout", None)
 
-        await es.transform.start_transform(transform_id=transform_id, timeout=timeout)
+        await es.transform.start_transform(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "start-transform"
@@ -2169,10 +2170,12 @@ class DeleteTransform(Runner):
     """
 
     async def __call__(self, es, params):
-        transform_id = mandatory(params, "transform-id", self)
-        force = params.get("force", False)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["transform-id"])
+        es_api_kwargs["transform_id"] = es_api_kwargs.pop("transform-id")
+        es_api_kwargs["force"] = runner_params.get("force", False)
+
         # we don't want to fail if a job does not exist, thus we ignore 404s.
-        await es.transform.delete_transform(transform_id=transform_id, force=force, ignore=[404])
+        await es.transform.delete_transform(ignore=[404], **es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "delete-transform"
@@ -2195,10 +2198,10 @@ class TransformStats(Runner):
         return str(v) if v is not None else None
 
     async def __call__(self, es, params):
-        api_kwargs = self._default_kw_params(params)
-        transform_id = mandatory(params, "transform-id", self)
-        condition = params.get("condition")
-        response = await es.transform.get_transform_stats(transform_id=transform_id, **api_kwargs)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["transform-id"])
+        es_api_kwargs["transform_id"] = es_api_kwargs.pop("transform-id")
+        condition = runner_params.get("condition")
+        response = await es.transform.get_transform_stats(**es_api_kwargs)
         transforms = response.get("transforms", [])
         transform_stats = transforms[0] if len(transforms) > 0 else {}
         if condition:
