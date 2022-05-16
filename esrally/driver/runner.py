@@ -215,12 +215,19 @@ class Runner:
             headers.update({"Authorization": f"ApiKey {api_key}"})
         return request_params, headers
 
-    def _extract_params(self, params, required=None):
+    def _extract_params(self, params, required_api_params=None, required_runner_params=None):
+        def validate_params(params, required, ret):
+            if required:
+                for required_param in required:
+                    ret[required_param] = mandatory(params, required_param, self)
+
         es_api_params = self._default_kw_params(params)
-        if required is not None:
-            for mandatory_param in required:
-                es_api_params[mandatory_param] = mandatory(params, mandatory_param, self)
-        return es_api_params
+        runner_params = {k: v for k, v in params.items() if k not in es_api_params}
+
+        validate_params(params, required_api_params, es_api_params)
+        validate_params(params, required_runner_params, runner_params)
+
+        return es_api_params, runner_params
 
 class Delegator:
     """
@@ -1135,8 +1142,8 @@ class PutPipeline(Runner):
     """
 
     async def __call__(self, es, params):
-        api_kwargs = self._extract_params(params, required=["id", "body"])
-        await es.ingest.put_pipeline(**api_kwargs)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["id", "body"])
+        await es.ingest.put_pipeline(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "put-pipeline"
@@ -1148,8 +1155,8 @@ class Refresh(Runner):
     """
 
     async def __call__(self, es, params):
-        api_kwargs = self._extract_params(params)
-        await es.indices.refresh(**api_kwargs)
+        es_api_kwargs, _ = self._extract_params(params)
+        await es.indices.refresh(**es_api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "refresh"
@@ -1161,13 +1168,14 @@ class CreateIndex(Runner):
     """
 
     async def __call__(self, es, params):
-        indices = mandatory(params, "indices", self)
-        api_kwargs = self._default_kw_params(params)
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["indices"])
+        indices = runner_params.get("indices")
+
         ## ignore invalid entries rather than erroring
         for term in ["index", "body"]:
-            api_kwargs.pop(term, None)
+            es_api_kwargs.pop(term, None)
         for index, body in indices:
-            await es.indices.create(index=index, body=body, **api_kwargs)
+            await es.indices.create(index=index, body=body, **es_api_kwargs)
         return {
             "weight": len(indices),
             "unit": "ops",
