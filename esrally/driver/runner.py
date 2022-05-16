@@ -1231,18 +1231,19 @@ class DeleteIndex(Runner):
     async def __call__(self, es, params):
         ops = 0
 
-        indices = mandatory(params, "indices", self)
-        only_if_exists = params.get("only-if-exists", False)
-        request_params = params.get("request-params", {})
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["indices"])
+        indices = runner_params.get("indices")
+        only_if_exists = runner_params.get("only-if-exists", False)
+        # TODO: add api_key support to set_destructive_requries_name()
         prior_destructive_setting = await set_destructive_requires_name(es, False)
         try:
             for index_name in indices:
                 if not only_if_exists:
-                    await es.indices.delete(index=index_name, params=request_params)
+                    await es.indices.delete(index=index_name, **es_api_kwargs)
                     ops += 1
                 elif only_if_exists and await es.indices.exists(index=index_name):
                     self.logger.info("Index [%s] already exists. Deleting it.", index_name)
-                    await es.indices.delete(index=index_name, params=request_params)
+                    await es.indices.delete(index=index_name, **es_api_kwargs)
                     ops += 1
         finally:
             await set_destructive_requires_name(es, prior_destructive_setting)
