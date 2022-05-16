@@ -1302,10 +1302,12 @@ class CreateComponentTemplate(Runner):
     """
 
     async def __call__(self, es, params):
-        templates = mandatory(params, "templates", self)
-        request_params = mandatory(params, "request-params", self)
+        es_api_kwargs, runner_params = self._extract_params(params,
+                                                            required_runner_params=["templates", "request-params"])
+        templates = runner_params.get("templates")
+
         for template, body in templates:
-            await es.cluster.put_component_template(name=template, body=body, params=request_params)
+            await es.cluster.put_component_template(name=template, body=body, **es_api_kwargs)
         return {
             "weight": len(templates),
             "unit": "ops",
@@ -1323,25 +1325,30 @@ class DeleteComponentTemplate(Runner):
     """
 
     async def __call__(self, es, params):
-        template_names = mandatory(params, "templates", self)
-        only_if_exists = mandatory(params, "only-if-exists", self)
-        request_params = mandatory(params, "request-params", self)
+
+        es_api_kwargs, runner_params = self._extract_params(params,
+                                                            required_runner_params=["templates", "only-if-exists", "request-params"])
+
+        template_names = runner_params.get("templates")
+        only_if_exists = runner_params.get("only-if-exists")
 
         async def _exists(name):
             # pylint: disable=import-outside-toplevel
             from elasticsearch.client import _make_path
 
             # currently not supported by client and hence custom request
-            return await es.transport.perform_request("HEAD", _make_path("_component_template", name))
+            # We need to pass along headers in order to use an API key for auth
+            _, headers = self._transport_request_params(params)
+            return await es.transport.perform_request("HEAD", _make_path("_component_template", name), headers=headers)
 
         ops_count = 0
         for template_name in template_names:
             if not only_if_exists:
-                await es.cluster.delete_component_template(name=template_name, params=request_params, ignore=[404])
+                await es.cluster.delete_component_template(name=template_name, ignore=[404], **es_api_kwargs)
                 ops_count += 1
             elif only_if_exists and await _exists(template_name):
                 self.logger.info("Component Index template [%s] already exists. Deleting it.", template_name)
-                await es.cluster.delete_component_template(name=template_name, params=request_params)
+                await es.cluster.delete_component_template(name=template_name, **es_api_kwargs)
                 ops_count += 1
         return {
             "weight": ops_count,

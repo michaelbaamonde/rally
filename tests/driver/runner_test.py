@@ -2977,7 +2977,7 @@ class TestDeleteComponentTemplateRunner:
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async
     async def test_deletes_only_existing_index_templates(self, es):
-        async def _side_effect(http_method, path):
+        async def _side_effect(http_method, path, headers={}):
             if http_method == "HEAD":
                 return path == "/_component_template/templateB"
 
