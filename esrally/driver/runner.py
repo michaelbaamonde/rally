@@ -209,6 +209,9 @@ class Runner:
         opaque_id = params.get("opaque-id")
         if opaque_id is not None:
             headers.update({"x-opaque-id": opaque_id})
+        api_key = params.get("api_key")
+        if api_key is not None:
+            headers.update({"Authorization": f"ApiKey {api_key}"})
         return request_params, headers
 
 
