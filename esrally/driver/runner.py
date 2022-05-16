@@ -1135,8 +1135,8 @@ class PutPipeline(Runner):
     """
 
     async def __call__(self, es, params):
-        es_api_params = self._extract_params(params, required=["id", "body"])
-        await es.ingest.put_pipeline(**es_api_params)
+        api_kwargs = self._extract_params(params, required=["id", "body"])
+        await es.ingest.put_pipeline(**api_kwargs)
 
     def __repr__(self, *args, **kwargs):
         return "put-pipeline"
@@ -1148,7 +1148,7 @@ class Refresh(Runner):
     """
 
     async def __call__(self, es, params):
-        api_kwargs = self._default_kw_params(params)
+        api_kwargs = self._extract_params(params)
         await es.indices.refresh(**api_kwargs)
 
     def __repr__(self, *args, **kwargs):
