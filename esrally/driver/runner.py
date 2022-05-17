@@ -1873,23 +1873,29 @@ class CreateSnapshot(Runner):
     def __repr__(self, *args, **kwargs):
         return "create-snapshot"
 
-
+# Start here
 class WaitForSnapshotCreate(Runner):
     async def __call__(self, es, params):
-        repository = mandatory(params, "repository", repr(self))
-        snapshot = mandatory(params, "snapshot", repr(self))
-        wait_period = params.get("completion-recheck-wait-period", 1)
+        async def get_running_snapshots(es_api_params):
+            # Override the snapshot in the user-provided params
+            es_api_params_copy = deepcopy(es_api_params)
+            es_api_params_copy["snapshot"] = "_current"
+            return await es.snapshot.get(verbose=False, **es_api_params_copy)
+
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["repository", "snapshot"])
+        snapshot = es_api_kwargs.get("snapshot")
+        wait_period = runner_params.get("completion-recheck-wait-period", 1)
 
         snapshot_done = False
         stats = {}
 
         while not snapshot_done:
-            response = await es.snapshot.get(repository=repository, snapshot="_current", verbose=False)
-            if snapshot in [s.get("snapshot") for s in response.get("snapshots", [])]:
+            currently_running_snapshots = await get_running_snapshots(es_api_kwargs)
+            if snapshot in [s.get("snapshot") for s in currently_running_snapshots.get("snapshots", [])]:
                 await asyncio.sleep(wait_period)
                 continue
 
-            response = await es.snapshot.status(repository=repository, snapshot=snapshot, ignore_unavailable=True)
+            response = await es.snapshot.status(ignore_unavailable=True, **es_api_kwargs)
 
             if "snapshots" in response:
                 response_state = response["snapshots"][0]["state"]
