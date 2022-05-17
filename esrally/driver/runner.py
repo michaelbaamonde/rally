@@ -1197,7 +1197,6 @@ class CreateDataStream(Runner):
     async def __call__(self, es, params):
         es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["data-streams", "request-params"])
         data_streams = runner_params.get("data-streams")
-        request_params = runner_params.get("request-params")
 
         for data_stream in data_streams:
             await es.indices.create_data_stream(data_stream, **es_api_kwargs)
@@ -2240,10 +2239,11 @@ class TransformStats(Runner):
 
 class SubmitAsyncSearch(Runner):
     async def __call__(self, es, params):
-        request_params = params.get("request-params", {})
-        response = await es.async_search.submit(body=mandatory(params, "body", self), index=params.get("index"), params=request_params)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["body"], required_runner_params=["name"])
 
-        op_name = mandatory(params, "name", self)
+        response = await es.async_search.submit(**es_api_kwargs)
+
+        op_name = runner_params.get("name")
         # id may be None if the operation has already returned
         search_id = response.get("id")
         CompositeContext.put(op_name, search_id)
@@ -2263,12 +2263,13 @@ def async_search_ids(op_names):
 
 class GetAsyncSearch(Runner):
     async def __call__(self, es, params):
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["retrieve-results-for"])
+        searches = runner_params.get("retrieve-results-for")
+
         success = True
-        searches = mandatory(params, "retrieve-results-for", self)
-        request_params = params.get("request-params", {})
         stats = {}
         for search_id, search in async_search_ids(searches):
-            response = await es.async_search.get(id=search_id, params=request_params)
+            response = await es.async_search.get(id=search_id, **es_api_kwargs)
             is_running = response["is_running"]
             success = success and not is_running
             if not is_running:
@@ -2293,9 +2294,10 @@ class GetAsyncSearch(Runner):
 
 class DeleteAsyncSearch(Runner):
     async def __call__(self, es, params):
-        searches = mandatory(params, "delete-results-for", self)
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["delete-results-for"])
+        searches = runner_params.get("delete-results-for")
         for search_id, search in async_search_ids(searches):
-            await es.async_search.delete(id=search_id)
+            await es.async_search.delete(id=search_id, **es_api_kwargs)
             CompositeContext.remove(search)
 
     def __repr__(self, *args, **kwargs):
