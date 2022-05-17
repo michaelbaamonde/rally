@@ -2460,10 +2460,11 @@ class CreateIlmPolicy(Runner):
     """
 
     async def __call__(self, es, params):
-        policy_name = mandatory(params, "policy-name", self)
-        body = mandatory(params, "body", self)
-        request_params = params.get("request-params", {})
-        await es.ilm.put_lifecycle(policy=policy_name, body=body, params=request_params)
+        es_api_kwargs, _ = self._extract_params(params, required_api_params=["body", "policy-name"])
+        # TODO: Change operation parameter name to "policy" for consistency with ES API?
+        es_api_kwargs["policy"] = es_api_kwargs.pop("policy-name")
+
+        await es.ilm.put_lifecycle(**es_api_kwargs)
         return {
             "weight": 1,
             "unit": "ops",
@@ -2481,9 +2482,11 @@ class DeleteIlmPolicy(Runner):
     """
 
     async def __call__(self, es, params):
-        policy_name = mandatory(params, "policy-name", self)
-        request_params = params.get("request-params", {})
-        await es.ilm.delete_lifecycle(policy=policy_name, params=request_params)
+        es_api_kwargs, _ = self._extract_params(params, required_api_params=["policy-name"])
+        # TODO: Change operation parameter name to "policy" for consistency with ES API?
+        es_api_kwargs["policy"] = es_api_kwargs.pop("policy-name")
+
+        await es.ilm.delete_lifecycle(**es_api_kwargs)
         return {
             "weight": 1,
             "unit": "ops",

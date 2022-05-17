@@ -4898,7 +4898,7 @@ class TestCreateIlmPolicyRunner:
             "success": True,
         }
 
-        es.ilm.put_lifecycle.assert_awaited_once_with(policy=params["policy-name"], body=params["body"], params={})
+        es.ilm.put_lifecycle.assert_awaited_once_with(policy=params["policy-name"], body=params["body"])
 
 
 class TestDeleteIlmPolicyRunner:
@@ -4933,7 +4933,7 @@ class TestDeleteIlmPolicyRunner:
             "success": True,
         }
 
-        es.ilm.delete_lifecycle.assert_awaited_once_with(policy=params["policy-name"], params={})
+        es.ilm.delete_lifecycle.assert_awaited_once_with(policy=params["policy-name"])
 
 
 class TestSqlRunner:
