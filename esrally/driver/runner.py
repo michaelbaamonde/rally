@@ -2543,14 +2543,16 @@ class FieldCaps(Runner):
     """
 
     async def __call__(self, es, params):
-        index = params.get("index", "_all")
-        fields = params.get("fields", "*")
-        body = params.get("body", {})
+        es_api_kwargs, runner_params = self._extract_params(params)
+        # TODO: _extract_params() should handle injecting defaults
+        es_api_kwargs["index"] = params.get("index", "_all")
+        es_api_kwargs["fields"] = params.get("fields", "*")
+        es_api_kwargs["body"] = params.get("body", {})
         index_filter = params.get("index_filter")
         if index_filter:
-            body["index_filter"] = index_filter
-        request_params = params.get("request-params")
-        await es.field_caps(index=index, body=body, fields=fields, params=request_params)
+            es_api_kwargs["body"]["index_filter"] = index_filter
+
+        await es.field_caps(**es_api_kwargs)
 
         return {"weight": 1, "unit": "ops", "success": True}
 
