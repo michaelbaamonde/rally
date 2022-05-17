@@ -2503,6 +2503,7 @@ class Sql(Runner):
     """
 
     async def __call__(self, es, params):
+        _, headers = self._transport_request_params(params)
         body = mandatory(params, "body", self)
         if body.get("query") is None:
             raise exceptions.DataError(
@@ -2513,7 +2514,7 @@ class Sql(Runner):
 
         es.return_raw_response()
 
-        r = await es.transport.perform_request("POST", "/_sql", body=body)
+        r = await es.transport.perform_request("POST", "/_sql", body=body, headers=headers)
         pages -= 1
         weight = 1
 
@@ -2525,7 +2526,7 @@ class Sql(Runner):
                     "Result set has been exhausted before all pages have been fetched, {} page(s) remaining.".format(pages)
                 )
 
-            r = await es.transport.perform_request("POST", "/_sql", body={"cursor": cursor})
+            r = await es.transport.perform_request("POST", "/_sql", body={"cursor": cursor}, headers=headers)
             pages -= 1
             weight += 1
 

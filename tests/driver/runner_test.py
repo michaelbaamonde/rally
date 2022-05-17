@@ -4967,7 +4967,7 @@ class TestSqlRunner:
 
         assert result == {"success": True, "weight": 1, "unit": "ops"}
 
-        es.transport.perform_request.assert_awaited_once_with("POST", "/_sql", body=params["body"])
+        es.transport.perform_request.assert_awaited_once_with("POST", "/_sql", body=params["body"], headers={})
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async
@@ -4984,9 +4984,9 @@ class TestSqlRunner:
 
         es.transport.perform_request.assert_has_calls(
             [
-                mock.call("POST", "/_sql", body=params["body"]),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
+                mock.call("POST", "/_sql", body=params["body"], headers={}),
+                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}, headers={}),
+                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}, headers={}),
             ]
         )
 
@@ -5014,8 +5014,8 @@ class TestSqlRunner:
 
         es.transport.perform_request.assert_has_calls(
             [
-                mock.call("POST", "/_sql", body=params["body"]),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
+                mock.call("POST", "/_sql", body=params["body"], headers={}),
+                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}, headers={}),
             ]
         )
 
