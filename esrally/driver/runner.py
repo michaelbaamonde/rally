@@ -1949,8 +1949,9 @@ class RestoreSnapshot(Runner):
 
 class IndicesRecovery(Runner):
     async def __call__(self, es, params):
-        index = mandatory(params, "index", repr(self))
-        wait_period = params.get("completion-recheck-wait-period", 1)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["index"])
+        index = es_api_kwargs.get("index")
+        wait_period = runner_params.get("completion-recheck-wait-period", 1)
 
         all_shards_done = False
         total_recovered = 0
@@ -1961,7 +1962,7 @@ class IndicesRecovery(Runner):
         # The nesting level is ok here given the structure of the API response
         # pylint: disable=too-many-nested-blocks
         while not all_shards_done:
-            response = await es.indices.recovery(index=index)
+            response = await es.indices.recovery(**es_api_kwargs)
             # This might happen if we happen to call the API before the next recovery is scheduled.
             if not response:
                 self.logger.debug("Empty index recovery response for [%s].", index)
