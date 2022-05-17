@@ -5185,7 +5185,7 @@ class TestClosePointInTime:
             runner.CompositeContext.put("open-pit-task1", pit_id)
             await r(es, params)
 
-        es.close_point_in_time.assert_awaited_once_with(body={"id": "0123456789abcdef"}, params={}, headers=None)
+        es.close_point_in_time.assert_awaited_once_with(body={"id": "0123456789abcdef"})
 
 
 class TestQueryWithSearchAfterScroll:

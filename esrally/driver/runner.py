@@ -2306,10 +2306,11 @@ class DeleteAsyncSearch(Runner):
 
 class OpenPointInTime(Runner):
     async def __call__(self, es, params):
-        op_name = mandatory(params, "name", self)
-        index = mandatory(params, "index", self)
-        keep_alive = params.get("keep-alive", "1m")
-        response = await es.open_point_in_time(index=index, params=params.get("request-params"), keep_alive=keep_alive)
+        es_api_kwargs, runner_params = self._extract_params(params, required_api_params=["index"], required_runner_params=["name"])
+
+        op_name = runner_params.get("name")
+        keep_alive = runner_params.get("keep-alive", "1m")
+        response = await es.open_point_in_time(keep_alive=keep_alive, **es_api_kwargs)
         id = response.get("id")
         CompositeContext.put(op_name, id)
 
@@ -2319,11 +2320,11 @@ class OpenPointInTime(Runner):
 
 class ClosePointInTime(Runner):
     async def __call__(self, es, params):
-        pit_op = mandatory(params, "with-point-in-time-from", self)
+        es_api_kwargs, runner_params = self._extract_params(params, required_runner_params=["with-point-in-time-from"])
+        pit_op = runner_params.get("with-point-in-time-from")
         pit_id = CompositeContext.get(pit_op)
-        request_params = params.get("request-params", {})
         body = {"id": pit_id}
-        await es.close_point_in_time(body=body, params=request_params, headers=None)
+        await es.close_point_in_time(body=body, **es_api_kwargs)
         CompositeContext.remove(pit_op)
 
     def __repr__(self, *args, **kwargs):
