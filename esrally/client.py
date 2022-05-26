@@ -366,24 +366,24 @@ class EsClientFactory:
 
                 # Set to True initially so wait_for_rest_layer and self.info() will
                 # bypass the check done in the superclass's perform_request() method
-                self._verified_elasticsearch = True
+                self._verified_elasticsearch = None
 
                 if distro is not None:
                     self.distribution_version = versions.Version.from_string(distro)
                 else:
                     self.distribution_version = None
 
-                wait_for_rest_layer(self)
+#                wait_for_rest_layer(self)
 
-                info = self.info()
-                meta = info.meta
-                body = info.body
+                # info = self.info()
+                # meta = info.meta
+                # body = info.body
 
-                # Reset after compatibility check
-                self._verified_elasticsearch = _ProductChecker.check_product(meta.headers, body)
+                # # Reset after compatibility check
+                # self._verified_elasticsearch = _ProductChecker.check_product(meta.headers, body)
 
-                if self._verified_elasticsearch is not True:
-                    _ProductChecker.raise_error(self._verified_elasticsearch, meta, body)
+                # if self._verified_elasticsearch is not True:
+                #     _ProductChecker.raise_error(self._verified_elasticsearch, meta, body)
 
             def perform_request(
                 self,
@@ -408,6 +408,20 @@ class EsClientFactory:
                     request_headers.update(headers)
                 else:
                     request_headers = self._headers
+
+                if self._verified_elasticsearch is None:
+                    info = self.transport.perform_request(
+                        method="GET",
+                        target="/",
+                        headers=request_headers
+                    )
+                    info_meta = info.meta
+                    info_body = info.body
+
+                    self._verified_elasticsearch = _ProductChecker.check_product(info_meta.headers, info_body)
+
+                    if self._verified_elasticsearch is not True:
+                        _ProductChecker.raise_error(self._verified_elasticsearch, info_meta, info_body)
 
                 def mimetype_header_to_compat(header: str) -> None:
                     # Converts all parts of a Accept/Content-Type headers
