@@ -28,7 +28,8 @@ import pytest
 import urllib3.exceptions
 
 from esrally import client, doc_link, exceptions
-from esrally.async_connection import AIOHttpConnection
+
+# from esrally.async_connection import AIOHttpConnection
 from esrally.utils import console
 from tests import run_async
 
@@ -352,13 +353,13 @@ class TestRestLayer:
             client.wait_for_rest_layer(es, max_attempts=3)
 
 
-class TestAsyncConnection:
-    @run_async
-    async def test_enable_cleanup_close(self):
-        connection = AIOHttpConnection()
-        # pylint: disable=protected-access
-        assert connection._enable_cleanup_closed is True
+# class TestAsyncConnection:
+#     @run_async
+#     async def test_enable_cleanup_close(self):
+#         connection = AIOHttpConnection()
+#         # pylint: disable=protected-access
+#         assert connection._enable_cleanup_closed is True
 
-        connection = AIOHttpConnection(enable_cleanup_closed=False)
-        # pylint: disable=protected-access
-        assert connection._enable_cleanup_closed is False
+#         connection = AIOHttpConnection(enable_cleanup_closed=False)
+#         # pylint: disable=protected-access
+#         assert connection._enable_cleanup_closed is False
