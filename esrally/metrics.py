@@ -149,11 +149,11 @@ class EsClient:
                 self.logger.exception(msg)
                 raise exceptions.SystemSetupError(msg)
             except elasticsearch.TransportError as e:
-                if e.status_code in (502, 503, 504, 429) and execution_count < max_execution_count:
+                if e.message in (502, 503, 504, 429) and execution_count < max_execution_count:
                     self.logger.debug(
                         "%s (code: %d) in attempt [%d/%d]. Sleeping for [%f] seconds.",
-                        responses[e.status_code],
-                        e.status_code,
+                        responses[e.message],
+                        e.message,
                         execution_count,
                         max_execution_count,
                         time_to_sleep,
@@ -168,7 +168,7 @@ class EsClient:
                     self.logger.exception(msg)
                     raise exceptions.RallyError(msg)
 
-            except (ApiError, TransportError):
+            except ApiError:
                 node = self._client.transport.hosts[0]
                 msg = (
                     "An unknown error occurred while running the operation [%s] against your Elasticsearch metrics store on host [%s] "
