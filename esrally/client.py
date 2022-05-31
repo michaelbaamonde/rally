@@ -245,7 +245,6 @@ class EsClientFactory:
                 self.ssl_context.load_cert_chain(certfile=client_cert, keyfile=client_key)
         else:
             self.logger.info("SSL support: off")
-            # self.client_options["scheme"] = "http"
 
         if self._is_set(self.client_options, "basic_auth_user") and self._is_set(self.client_options, "basic_auth_password"):
             self.logger.info("HTTP basic authentication: on")
