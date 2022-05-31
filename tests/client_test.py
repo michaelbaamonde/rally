@@ -448,7 +448,7 @@ class TestRestLayer:
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
 
-
+# TODO: Necessary?
 # class TestAsyncConnection:
 #    @pytest.mark.asyncio
 #     async def test_enable_cleanup_close(self):
