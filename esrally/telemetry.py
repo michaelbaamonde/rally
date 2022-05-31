@@ -2276,7 +2276,9 @@ class DiskUsageStats(TelemetryDevice):
         for index in self.indices.split(","):
             self.logger.debug("Gathering disk usage for [%s]", index)
             try:
-                response = self.client.transport.perform_request(method="POST", path=f"/{index}/_disk_usage", params={"run_expensive_tasks": "true"})
+                response = self.client.transport.perform_request(
+                    method="POST", path=f"/{index}/_disk_usage", params={"run_expensive_tasks": "true"}
+                )
             except elasticsearch.RequestError:
                 msg = f"A transport error occurred while collecting disk usage for {index}"
                 self.logger.exception(msg)
