@@ -4161,7 +4161,7 @@ class TestDiskUsageStats:
         t.on_benchmark_stop()
         assert tc.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
-            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}}
+            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
 
     @mock.patch("elasticsearch.Elasticsearch")
@@ -4176,7 +4176,7 @@ class TestDiskUsageStats:
         t.on_benchmark_stop()
         assert tc.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
-            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}}
+            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
 
     @mock.patch("elasticsearch.Elasticsearch")
@@ -4193,7 +4193,7 @@ class TestDiskUsageStats:
         t.on_benchmark_stop()
         assert tc.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
-            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}}
+            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
 
     @mock.patch("elasticsearch.Elasticsearch")
@@ -4210,7 +4210,7 @@ class TestDiskUsageStats:
         t.on_benchmark_stop()
         assert tc.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
-            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}}
+            {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
 
     @mock.patch("esrally.metrics.EsMetricsStore.put_value_cluster_level")
@@ -4251,10 +4251,7 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
-                force_error=True,
-                error=elasticsearch.RequestError(message="400", meta=None, body=None)
-            )
+            transport_client=TransportClient(force_error=True, error=elasticsearch.RequestError(message="400", meta=None, body=None))
         )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo", "bar"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])

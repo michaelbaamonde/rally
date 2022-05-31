@@ -37,7 +37,6 @@ from typing import (
 import certifi
 import elastic_transport
 import urllib3
-
 from elastic_transport import (
     ApiResponse,
     BinaryApiResponse,
@@ -65,7 +64,6 @@ from elasticsearch.exceptions import (
     ElasticsearchWarning,
     UnsupportedProductError,
 )
-
 
 from esrally import doc_link, exceptions, version
 from esrally.utils import console, convert, versions
@@ -381,11 +379,7 @@ class EsClientFactory:
                     request_headers = self._headers
 
                 if self._verified_elasticsearch is None:
-                    info = self.transport.perform_request(
-                        method="GET",
-                        target="/",
-                        headers=request_headers
-                    )
+                    info = self.transport.perform_request(method="GET", target="/", headers=request_headers)
                     info_meta = info.meta
                     info_body = info.body
 

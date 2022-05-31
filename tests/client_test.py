@@ -233,7 +233,6 @@ class TestEsClientFactory:
         assert not f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_NONE
 
-
         assert f.client_options["basic_auth"] == ("user", "password")
         assert not f.client_options["verify_certs"]
 
@@ -344,6 +343,7 @@ class TestRestLayer:
         )
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
+
 
 # TODO: Necessary?
 # class TestAsyncConnection:
