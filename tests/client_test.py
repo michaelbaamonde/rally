@@ -47,9 +47,9 @@ class TestEsClientFactory:
 
         f = client.EsClientFactory(hosts, client_options)
 
-        assert f.hosts == hosts
+        assert f.hosts == ["http://127.0.0.1:9200"]
         assert f.ssl_context is None
-        assert f.client_options["scheme"] == "http"
+        # assert f.client_options["scheme"] == "http"
         assert "http_auth" not in f.client_options
 
         assert client_options == original_client_options
@@ -414,10 +414,7 @@ class TestRequestContextManager:
 class TestRestLayer:
     @mock.patch("elasticsearch.Elasticsearch")
     def test_successfully_waits_for_rest_layer(self, es):
-        es.transport.hosts = [
-            {"host": "node-a.example.org", "port": 9200},
-            {"host": "node-b.example.org", "port": 9200},
-        ]
+        es.transport.node_pool.__len__ = mock.Mock(return_value=2)
         assert client.wait_for_rest_layer(es, max_attempts=3)
         es.cluster.health.assert_has_calls(
             [
@@ -448,9 +445,8 @@ class TestRestLayer:
     @mock.patch("elasticsearch.Elasticsearch")
     def test_ssl_error(self, es):
         es.cluster.health.side_effect = elasticsearch.ConnectionError(
-            "N/A",
-            "[SSL: UNKNOWN_PROTOCOL] unknown protocol (_ssl.c:719)",
-            urllib3.exceptions.SSLError("[SSL: UNKNOWN_PROTOCOL] unknown protocol (_ssl.c:719)"),
+            message="N/A",
+            errors=[urllib3.exceptions.SSLError("[SSL: UNKNOWN_PROTOCOL] unknown protocol (_ssl.c:719)")],
         )
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
