@@ -49,8 +49,7 @@ class TestEsClientFactory:
 
         assert f.hosts == ["http://127.0.0.1:9200"]
         assert f.ssl_context is None
-        # assert f.client_options["scheme"] == "http"
-        assert "http_auth" not in f.client_options
+        assert "basic_auth" not in f.client_options
 
         assert client_options == original_client_options
 
@@ -60,7 +59,7 @@ class TestEsClientFactory:
         client_options = {
             "use_ssl": True,
             "verify_certs": True,
-            "http_auth": ("user", "password"),
+            "basic_auth": ("user", "password"),
         }
         # make a copy so we can verify later that the factory did not modify it
         original_client_options = deepcopy(client_options)
@@ -80,14 +79,13 @@ class TestEsClientFactory:
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
 
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
-        assert f.client_options["scheme"] == "https"
-        assert f.client_options["http_auth"] == ("user", "password")
+        assert f.client_options["basic_auth"] == ("user", "password")
+        assert f.client_options["verify_certs"]
         assert "use_ssl" not in f.client_options
-        assert "verify_certs" not in f.client_options
         assert "ca_certs" not in f.client_options
 
         assert client_options == original_client_options
@@ -98,7 +96,7 @@ class TestEsClientFactory:
         client_options = {
             "use_ssl": True,
             "verify_certs": True,
-            "http_auth": ("user", "password"),
+            "basic_auth": ("user", "password"),
             "ca_certs": os.path.join(self.cwd, "utils/resources/certs/ca.crt"),
             "client_cert": os.path.join(self.cwd, "utils/resources/certs/client.crt"),
             "client_key": os.path.join(self.cwd, "utils/resources/certs/client.key"),
@@ -122,14 +120,14 @@ class TestEsClientFactory:
             keyfile=client_options["client_key"],
         )
 
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
-        assert f.client_options["scheme"] == "https"
-        assert f.client_options["http_auth"] == ("user", "password")
+        assert f.client_options["basic_auth"] == ("user", "password")
+        assert f.client_options["verify_certs"]
+
         assert "use_ssl" not in f.client_options
-        assert "verify_certs" not in f.client_options
         assert "ca_certs" not in f.client_options
         assert "client_cert" not in f.client_options
         assert "client_key" not in f.client_options
@@ -142,7 +140,7 @@ class TestEsClientFactory:
         client_options = {
             "use_ssl": True,
             "verify_certs": True,
-            "http_auth": ("user", "password"),
+            "basic_auth": ("user", "password"),
             "ca_certs": os.path.join(self.cwd, "utils/resources/certs/ca.crt"),
         }
         # make a copy so we can verify later that the factory did not modify it
@@ -162,14 +160,13 @@ class TestEsClientFactory:
         assert (
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
-        assert f.client_options["scheme"] == "https"
-        assert f.client_options["http_auth"] == ("user", "password")
+        assert f.client_options["basic_auth"] == ("user", "password")
+        assert f.client_options["verify_certs"]
         assert "use_ssl" not in f.client_options
-        assert "verify_certs" not in f.client_options
         assert "ca_certs" not in f.client_options
 
         assert client_options == original_client_options
@@ -179,7 +176,7 @@ class TestEsClientFactory:
         client_options = {
             "use_ssl": True,
             "verify_certs": True,
-            "http_auth": ("user", "password"),
+            "basic_auth": ("user", "password"),
             "ca_certs": os.path.join(self.cwd, "utils/resources/certs/ca.crt"),
         }
 
@@ -234,14 +231,15 @@ class TestEsClientFactory:
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
 
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert not f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_NONE
 
-        assert f.client_options["scheme"] == "https"
-        assert f.client_options["http_auth"] == ("user", "password")
+
+        assert f.client_options["basic_auth"] == ("user", "password")
+        assert not f.client_options["verify_certs"]
+
         assert "use_ssl" not in f.client_options
-        assert "verify_certs" not in f.client_options
         assert "basic_auth_user" not in f.client_options
         assert "basic_auth_password" not in f.client_options
 
@@ -253,7 +251,7 @@ class TestEsClientFactory:
         client_options = {
             "use_ssl": True,
             "verify_certs": False,
-            "http_auth": ("user", "password"),
+            "basic_auth": ("user", "password"),
             "client_cert": os.path.join(self.cwd, "utils/resources/certs/client.crt"),
             "client_key": os.path.join(self.cwd, "utils/resources/certs/client.key"),
         }
@@ -275,14 +273,13 @@ class TestEsClientFactory:
             keyfile=client_options["client_key"],
         )
 
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert not f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_NONE
 
-        assert f.client_options["scheme"] == "https"
-        assert f.client_options["http_auth"] == ("user", "password")
+        assert f.client_options["basic_auth"] == ("user", "password")
         assert "use_ssl" not in f.client_options
-        assert "verify_certs" not in f.client_options
+        assert not f.client_options["verify_certs"]
         assert "basic_auth_user" not in f.client_options
         assert "basic_auth_password" not in f.client_options
         assert "ca_certs" not in f.client_options
