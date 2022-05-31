@@ -169,7 +169,8 @@ class EsClientFactory:
     def __init__(self, hosts, client_options, distribution_version=None):
         # Hack, need to also support https
         def host_string(host):
-            return f"http://{host['host']}:{host['port']}"
+            protocol = "https" if client_options.get("use_ssl") else "http"
+            return f"{protocol}://{host['host']}:{host['port']}"
 
         self.hosts = [host_string(h) for h in hosts]
         self.client_options = dict(client_options)
@@ -190,13 +191,12 @@ class EsClientFactory:
             import ssl
 
             self.logger.info("SSL support: on")
-            # self.client_options["scheme"] = "https"
 
             self.ssl_context = ssl.create_default_context(
                 ssl.Purpose.SERVER_AUTH, cafile=self.client_options.pop("ca_certs", certifi.where())
             )
 
-            if not self.client_options.pop("verify_certs", True):
+            if not self.client_options.get("verify_certs", True):
                 self.logger.info("SSL certificate verification: off")
                 # order matters to avoid ValueError: check_hostname needs a SSL context with either CERT_OPTIONAL or CERT_REQUIRED
                 self.ssl_context.check_hostname = False
@@ -249,7 +249,7 @@ class EsClientFactory:
 
         if self._is_set(self.client_options, "basic_auth_user") and self._is_set(self.client_options, "basic_auth_password"):
             self.logger.info("HTTP basic authentication: on")
-            self.client_options["http_auth"] = (self.client_options.pop("basic_auth_user"), self.client_options.pop("basic_auth_password"))
+            self.client_options["basic_auth"] = (self.client_options.pop("basic_auth_user"), self.client_options.pop("basic_auth_password"))
         else:
             self.logger.info("HTTP basic authentication: off")
 
@@ -372,18 +372,6 @@ class EsClientFactory:
                     self.distribution_version = versions.Version.from_string(distro)
                 else:
                     self.distribution_version = None
-
-#                wait_for_rest_layer(self)
-
-                # info = self.info()
-                # meta = info.meta
-                # body = info.body
-
-                # # Reset after compatibility check
-                # self._verified_elasticsearch = _ProductChecker.check_product(meta.headers, body)
-
-                # if self._verified_elasticsearch is not True:
-                #     _ProductChecker.raise_error(self._verified_elasticsearch, meta, body)
 
             def perform_request(
                 self,
