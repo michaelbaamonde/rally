@@ -200,6 +200,7 @@ class Runner:
         # filter Nones
         return dict(filter(lambda kv: kv[1] is not None, full_result.items()))
 
+    # TODO: have this function call options() on the es instance?
     def _transport_request_params(self, params):
         request_params = params.get("request-params", {})
         request_timeout = params.get("request-timeout")
@@ -726,7 +727,7 @@ class NodeStats(Runner):
 
     async def __call__(self, es, params):
         request_timeout = params.get("request-timeout")
-        await es.nodes.stats(metric="_all", request_timeout=request_timeout)
+        await es.options(request_timeout=request_timeout).nodes.stats(metric="_all")
 
     def __repr__(self, *args, **kwargs):
         return "node-stats"
@@ -823,6 +824,9 @@ class Query(Runner):
 
     async def __call__(self, es, params):
         request_params, headers = self._transport_request_params(params)
+        request_timeout = request_params.pop("request_timeout", None)
+        if request_timeout is not None:
+            es.options(request_timeout=request_timeout)
         # Mandatory to ensure it is always provided. This is especially important when this runner is used in a
         # composite context where there is no actual parameter source and the entire request structure must be provided
         # by the composite's parameter source.
@@ -1530,7 +1534,7 @@ class CreateMlDatafeed(Runner):
         datafeed_id = mandatory(params, "datafeed-id", self)
         body = mandatory(params, "body", self)
         try:
-            await es.xpack.ml.put_datafeed(datafeed_id=datafeed_id, body=body)
+            await es.ml.put_datafeed(datafeed_id=datafeed_id, body=body)
         except elasticsearch.BadRequestError:
             # fallback to old path
             await es.perform_request(
@@ -1557,12 +1561,13 @@ class DeleteMlDatafeed(Runner):
         try:
             # we don't want to fail if a datafeed does not exist, thus we ignore 404s.
             await es.ml.delete_datafeed(datafeed_id=datafeed_id, force=force, ignore=[404])
-        except elasticsearch.BadRequestError:
+        except elasticsearch.BadRequestError as e:
             await es.perform_request(
-                method="DELETE",
-                path=f"/_xpack/ml/datafeeds/{datafeed_id}",
-                params={"force": escape(force), "ignore": 404},
-            )
+                    method="DELETE",
+                    path=f"/_xpack/ml/datafeeds/{datafeed_id}",
+                    params={"force": escape(force), "ignore": 404},
+                )
+
 
     def __repr__(self, *args, **kwargs):
         return "delete-ml-datafeed"
@@ -1583,7 +1588,7 @@ class StartMlDatafeed(Runner):
         end = params.get("end")
         timeout = params.get("timeout")
         try:
-            await es.xpack.ml.start_datafeed(datafeed_id=datafeed_id, body=body, start=start, end=end, timeout=timeout)
+            await es.ml.start_datafeed(datafeed_id=datafeed_id, body=body, start=start, end=end, timeout=timeout)
         except elasticsearch.BadRequestError:
             await es.perform_request(
                 method="POST",
@@ -1608,7 +1613,7 @@ class StopMlDatafeed(Runner):
         force = params.get("force", False)
         timeout = params.get("timeout")
         try:
-            await es.xpack.ml.stop_datafeed(datafeed_id=datafeed_id, force=force, timeout=timeout)
+            await es.ml.stop_datafeed(datafeed_id=datafeed_id, force=force, timeout=timeout)
         except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
             request_params = {
@@ -1634,7 +1639,7 @@ class CreateMlJob(Runner):
         job_id = mandatory(params, "job-id", self)
         body = mandatory(params, "body", self)
         try:
-            await es.xpack.ml.put_job(job_id=job_id, body=body)
+            await es.ml.put_job(job_id=job_id, body=body)
         except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
             await es.perform_request(
@@ -1660,7 +1665,7 @@ class DeleteMlJob(Runner):
         force = params.get("force", False)
         # we don't want to fail if a job does not exist, thus we ignore 404s.
         try:
-            await es.xpack.ml.delete_job(job_id=job_id, force=force, ignore=[404])
+            await es.ml.delete_job(job_id=job_id, force=force, ignore=[404])
         except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
             await es.perform_request(
@@ -1684,7 +1689,7 @@ class OpenMlJob(Runner):
 
         job_id = mandatory(params, "job-id", self)
         try:
-            await es.xpack.ml.open_job(job_id=job_id)
+            await es.ml.open_job(job_id=job_id)
         except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
             await es.perform_request(
@@ -1709,7 +1714,7 @@ class CloseMlJob(Runner):
         force = params.get("force", False)
         timeout = params.get("timeout")
         try:
-            await es.xpack.ml.close_job(job_id=job_id, force=force, timeout=timeout)
+            await es.ml.close_job(job_id=job_id, force=force, timeout=timeout)
         except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
             request_params = {
