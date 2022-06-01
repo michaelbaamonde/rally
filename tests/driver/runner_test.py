@@ -24,8 +24,8 @@ import math
 import random
 import unittest.mock as mock
 
-import elasticsearch
 import elastic_transport
+import elasticsearch
 import pytest
 
 from esrally import client, exceptions
@@ -1577,7 +1577,7 @@ class TestQueryRunner:
         es.perform_request.assert_awaited_once_with(
             method="GET",
             path="/_all/_search",
-            #params={"request_timeout": 3.0, "request_cache": "true"},
+            # params={"request_timeout": 3.0, "request_cache": "true"},
             params={"request_cache": "true"},
             body=params["body"],
             headers={"header1": "value1", "x-opaque-id": "test-id1"},
@@ -3306,9 +3306,7 @@ class TestStopMlDatafeed:
         r = runner.StopMlDatafeed()
         await r(es, params)
 
-        es.ml.stop_datafeed.assert_awaited_once_with(
-            datafeed_id=params["datafeed-id"], force=params["force"], timeout=params["timeout"]
-        )
+        es.ml.stop_datafeed.assert_awaited_once_with(datafeed_id=params["datafeed-id"], force=params["force"], timeout=params["timeout"])
 
     @mock.patch("elasticsearch.Elasticsearch")
     @run_async

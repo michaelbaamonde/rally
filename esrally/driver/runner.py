@@ -1563,11 +1563,10 @@ class DeleteMlDatafeed(Runner):
             await es.ml.delete_datafeed(datafeed_id=datafeed_id, force=force, ignore=[404])
         except elasticsearch.BadRequestError as e:
             await es.perform_request(
-                    method="DELETE",
-                    path=f"/_xpack/ml/datafeeds/{datafeed_id}",
-                    params={"force": escape(force), "ignore": 404},
-                )
-
+                method="DELETE",
+                path=f"/_xpack/ml/datafeeds/{datafeed_id}",
+                params={"force": escape(force), "ignore": 404},
+            )
 
     def __repr__(self, *args, **kwargs):
         return "delete-ml-datafeed"

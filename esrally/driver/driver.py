@@ -27,8 +27,8 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
-from io import BytesIO
 from enum import Enum
+from io import BytesIO
 from typing import Callable
 
 import thespian.actors
