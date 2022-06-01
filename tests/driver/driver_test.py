@@ -23,8 +23,8 @@ import time
 import unittest.mock as mock
 from datetime import datetime
 
-import elasticsearch
 import elastic_transport
+import elasticsearch
 import pytest
 
 from esrally import config, exceptions, metrics, track
@@ -1755,7 +1755,9 @@ class TestAsyncExecutor:
         es = None
         params = None
         error_meta = elastic_transport.ApiResponseMeta(status=404, http_version="1.1", headers={}, duration=0.0, node=None)
-        runner = mock.AsyncMock(side_effect=elasticsearch.NotFoundError(message="not found", meta=error_meta, body="the requested document could not be found"))
+        runner = mock.AsyncMock(
+            side_effect=elasticsearch.NotFoundError(message="not found", meta=error_meta, body="the requested document could not be found")
+        )
 
         with pytest.raises(exceptions.RallyAssertionError) as exc:
             await driver.execute_single(self.context_managed(runner), es, params, on_error="abort")
@@ -1768,7 +1770,9 @@ class TestAsyncExecutor:
         es = None
         params = None
         error_meta = elastic_transport.ApiResponseMeta(status=404, http_version="1.1", headers={}, duration=0.0, node=None)
-        runner = mock.AsyncMock(side_effect=elasticsearch.NotFoundError(message="not found", meta=error_meta, body="the requested document could not be found"))
+        runner = mock.AsyncMock(
+            side_effect=elasticsearch.NotFoundError(message="not found", meta=error_meta, body="the requested document could not be found")
+        )
 
         ops, unit, request_meta_data = await driver.execute_single(self.context_managed(runner), es, params, on_error="continue")
 
