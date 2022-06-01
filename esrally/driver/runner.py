@@ -1531,16 +1531,13 @@ class CreateMlDatafeed(Runner):
         body = mandatory(params, "body", self)
         try:
             await es.xpack.ml.put_datafeed(datafeed_id=datafeed_id, body=body)
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="PUT",
-                    path=f"/_xpack/ml/datafeeds/{datafeed_id}",
-                    body=body,
-                )
-            else:
-                raise e
+            await es.perform_request(
+                method="PUT",
+                path=f"/_xpack/ml/datafeeds/{datafeed_id}",
+                body=body,
+            )
 
     def __repr__(self, *args, **kwargs):
         return "create-ml-datafeed"
@@ -1560,16 +1557,12 @@ class DeleteMlDatafeed(Runner):
         try:
             # we don't want to fail if a datafeed does not exist, thus we ignore 404s.
             await es.xpack.ml.delete_datafeed(datafeed_id=datafeed_id, force=force, ignore=[404])
-        except elasticsearch.TransportError as e:
-            # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="DELETE",
-                    path=f"/_xpack/ml/datafeeds/{datafeed_id}",
-                    params={"force": escape(force), "ignore": 404},
-                )
-            else:
-                raise e
+        except elasticsearch.BadRequestError:
+            await es.perform_request(
+                method="DELETE",
+                path=f"/_xpack/ml/datafeeds/{datafeed_id}",
+                params={"force": escape(force), "ignore": 404},
+            )
 
     def __repr__(self, *args, **kwargs):
         return "delete-ml-datafeed"
@@ -1591,16 +1584,12 @@ class StartMlDatafeed(Runner):
         timeout = params.get("timeout")
         try:
             await es.xpack.ml.start_datafeed(datafeed_id=datafeed_id, body=body, start=start, end=end, timeout=timeout)
-        except elasticsearch.TransportError as e:
-            # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="POST",
-                    path=f"/_xpack/ml/datafeeds/{datafeed_id}/_start",
-                    body=body,
-                )
-            else:
-                raise e
+        except elasticsearch.BadRequestError:
+            await es.perform_request(
+                method="POST",
+                path=f"/_xpack/ml/datafeeds/{datafeed_id}/_start",
+                body=body,
+            )
 
     def __repr__(self, *args, **kwargs):
         return "start-ml-datafeed"
@@ -1620,17 +1609,14 @@ class StopMlDatafeed(Runner):
         timeout = params.get("timeout")
         try:
             await es.xpack.ml.stop_datafeed(datafeed_id=datafeed_id, force=force, timeout=timeout)
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                request_params = {
-                    "force": escape(force),
-                }
-                if timeout:
-                    request_params["timeout"] = escape(timeout)
-                await es.perform_request(method="POST", path=f"/_xpack/ml/datafeeds/{datafeed_id}/_stop", params=request_params)
-            else:
-                raise e
+            request_params = {
+                "force": escape(force),
+            }
+            if timeout:
+                request_params["timeout"] = escape(timeout)
+            await es.perform_request(method="POST", path=f"/_xpack/ml/datafeeds/{datafeed_id}/_stop", params=request_params)
 
     def __repr__(self, *args, **kwargs):
         return "stop-ml-datafeed"
@@ -1649,16 +1635,13 @@ class CreateMlJob(Runner):
         body = mandatory(params, "body", self)
         try:
             await es.xpack.ml.put_job(job_id=job_id, body=body)
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="PUT",
-                    path=f"/_xpack/ml/anomaly_detectors/{job_id}",
-                    body=body,
-                )
-            else:
-                raise e
+            await es.perform_request(
+                method="PUT",
+                path=f"/_xpack/ml/anomaly_detectors/{job_id}",
+                body=body,
+            )
 
     def __repr__(self, *args, **kwargs):
         return "create-ml-job"
@@ -1678,16 +1661,13 @@ class DeleteMlJob(Runner):
         # we don't want to fail if a job does not exist, thus we ignore 404s.
         try:
             await es.xpack.ml.delete_job(job_id=job_id, force=force, ignore=[404])
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="DELETE",
-                    path=f"/_xpack/ml/anomaly_detectors/{job_id}",
-                    params={"force": escape(force), "ignore": 404},
-                )
-            else:
-                raise e
+            await es.perform_request(
+                method="DELETE",
+                path=f"/_xpack/ml/anomaly_detectors/{job_id}",
+                params={"force": escape(force), "ignore": 404},
+            )
 
     def __repr__(self, *args, **kwargs):
         return "delete-ml-job"
@@ -1705,15 +1685,12 @@ class OpenMlJob(Runner):
         job_id = mandatory(params, "job-id", self)
         try:
             await es.xpack.ml.open_job(job_id=job_id)
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                await es.perform_request(
-                    method="POST",
-                    path=f"/_xpack/ml/anomaly_detectors/{job_id}/_open",
-                )
-            else:
-                raise e
+            await es.perform_request(
+                method="POST",
+                path=f"/_xpack/ml/anomaly_detectors/{job_id}/_open",
+            )
 
     def __repr__(self, *args, **kwargs):
         return "open-ml-job"
@@ -1733,22 +1710,19 @@ class CloseMlJob(Runner):
         timeout = params.get("timeout")
         try:
             await es.xpack.ml.close_job(job_id=job_id, force=force, timeout=timeout)
-        except elasticsearch.TransportError as e:
+        except elasticsearch.BadRequestError:
             # fallback to old path (ES < 7)
-            if e.status_code == 400:
-                request_params = {
-                    "force": escape(force),
-                }
-                if timeout:
-                    request_params["timeout"] = escape(timeout)
+            request_params = {
+                "force": escape(force),
+            }
+            if timeout:
+                request_params["timeout"] = escape(timeout)
 
-                await es.perform_request(
-                    method="POST",
-                    path=f"/_xpack/ml/anomaly_detectors/{job_id}/_close",
-                    params=request_params,
-                )
-            else:
-                raise e
+            await es.perform_request(
+                method="POST",
+                path=f"/_xpack/ml/anomaly_detectors/{job_id}/_close",
+                params=request_params,
+            )
 
     def __repr__(self, *args, **kwargs):
         return "close-ml-job"
@@ -2459,7 +2433,7 @@ class Sql(Runner):
 
         es.return_raw_response()
 
-        r = await es.perform_request("POST", "/_sql", body=body)
+        r = await es.perform_request(method="POST", path="/_sql", body=body)
         pages -= 1
         weight = 1
 
@@ -2471,7 +2445,7 @@ class Sql(Runner):
                     "Result set has been exhausted before all pages have been fetched, {} page(s) remaining.".format(pages)
                 )
 
-            r = await es.perform_request("POST", "/_sql", body={"cursor": cursor})
+            r = await es.perform_request(method="POST", path="/_sql", body={"cursor": cursor})
             pages -= 1
             weight += 1
 

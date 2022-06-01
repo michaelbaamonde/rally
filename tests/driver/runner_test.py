@@ -25,6 +25,7 @@ import random
 import unittest.mock as mock
 
 import elasticsearch
+import elastic_transport
 import pytest
 
 from esrally import client, exceptions
@@ -3195,7 +3196,8 @@ class TestCreateMlDatafeed:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_create_ml_datafeed_fallback(self, es):
-        es.xpack.ml.put_datafeed = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.put_datafeed = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
         datafeed_id = "some-data-feed"
         body = {"job_id": "total-requests", "indices": ["server-metrics"]}
@@ -3204,7 +3206,7 @@ class TestCreateMlDatafeed:
         r = runner.CreateMlDatafeed()
         await r(es, params)
 
-        es.perform_request.assert_awaited_once_with("PUT", f"/_xpack/ml/datafeeds/{datafeed_id}", body=body)
+        es.perform_request.assert_awaited_once_with(method="PUT", path=f"/_xpack/ml/datafeeds/{datafeed_id}", body=body)
 
 
 class TestDeleteMlDatafeed:
@@ -3224,7 +3226,9 @@ class TestDeleteMlDatafeed:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_delete_ml_datafeed_fallback(self, es):
-        es.xpack.ml.delete_datafeed = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.delete_datafeed = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
+
         es.perform_request = mock.AsyncMock()
         datafeed_id = "some-data-feed"
         params = {
@@ -3235,7 +3239,7 @@ class TestDeleteMlDatafeed:
         await r(es, params)
 
         es.perform_request.assert_awaited_once_with(
-            "DELETE", f"/_xpack/ml/datafeeds/{datafeed_id}", params={"force": "false", "ignore": 404}
+            method="DELETE", path=f"/_xpack/ml/datafeeds/{datafeed_id}", params={"force": "false", "ignore": 404}
         )
 
 
@@ -3256,7 +3260,8 @@ class TestStartMlDatafeed:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_start_ml_datafeed_with_body_fallback(self, es):
-        es.xpack.ml.start_datafeed = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.start_datafeed = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
         body = {"end": "now"}
         params = {"datafeed-id": "some-data-feed", "body": body}
@@ -3264,7 +3269,7 @@ class TestStartMlDatafeed:
         r = runner.StartMlDatafeed()
         await r(es, params)
 
-        es.perform_request.assert_awaited_once_with("POST", f"/_xpack/ml/datafeeds/{params['datafeed-id']}/_start", body=body)
+        es.perform_request.assert_awaited_once_with(method="POST", path=f"/_xpack/ml/datafeeds/{params['datafeed-id']}/_start", body=body)
 
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
@@ -3306,7 +3311,8 @@ class TestStopMlDatafeed:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_stop_ml_datafeed_fallback(self, es):
-        es.xpack.ml.stop_datafeed = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.stop_datafeed = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
 
         params = {
@@ -3319,8 +3325,8 @@ class TestStopMlDatafeed:
         await r(es, params)
 
         es.perform_request.assert_awaited_once_with(
-            "POST",
-            f"/_xpack/ml/datafeeds/{params['datafeed-id']}/_stop",
+            method="POST",
+            path=f"/_xpack/ml/datafeeds/{params['datafeed-id']}/_stop",
             params={"force": str(params["force"]).lower(), "timeout": params["timeout"]},
         )
 
@@ -3357,7 +3363,8 @@ class TestCreateMlJob:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_create_ml_job_fallback(self, es):
-        es.xpack.ml.put_job = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.put_job = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
 
         body = {
@@ -3379,7 +3386,7 @@ class TestCreateMlJob:
         r = runner.CreateMlJob()
         await r(es, params)
 
-        es.perform_request.assert_awaited_once_with("PUT", f"/_xpack/ml/anomaly_detectors/{params['job-id']}", body=body)
+        es.perform_request.assert_awaited_once_with(method="PUT", path=f"/_xpack/ml/anomaly_detectors/{params['job-id']}", body=body)
 
 
 class TestDeleteMlJob:
@@ -3399,7 +3406,8 @@ class TestDeleteMlJob:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_delete_ml_job_fallback(self, es):
-        es.xpack.ml.delete_job = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.delete_job = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
 
         job_id = "an-ml-job"
@@ -3409,7 +3417,7 @@ class TestDeleteMlJob:
         await r(es, params)
 
         es.perform_request.assert_awaited_once_with(
-            "DELETE", f"/_xpack/ml/anomaly_detectors/{params['job-id']}", params={"force": "false", "ignore": 404}
+            method="DELETE", path=f"/_xpack/ml/anomaly_detectors/{params['job-id']}", params={"force": "false", "ignore": 404}
         )
 
 
@@ -3430,7 +3438,8 @@ class TestOpenMlJob:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_open_ml_job_fallback(self, es):
-        es.xpack.ml.open_job = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.open_job = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
 
         job_id = "an-ml-job"
@@ -3439,7 +3448,7 @@ class TestOpenMlJob:
         r = runner.OpenMlJob()
         await r(es, params)
 
-        es.perform_request.assert_awaited_once_with("POST", f"/_xpack/ml/anomaly_detectors/{params['job-id']}/_open")
+        es.perform_request.assert_awaited_once_with(method="POST", path=f"/_xpack/ml/anomaly_detectors/{params['job-id']}/_open")
 
 
 class TestCloseMlJob:
@@ -3461,7 +3470,8 @@ class TestCloseMlJob:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_close_ml_job_fallback(self, es):
-        es.xpack.ml.close_job = mock.AsyncMock(side_effect=elasticsearch.TransportError(400, "Bad Request"))
+        error_meta = elastic_transport.ApiResponseMeta(status=400, http_version="1.1", headers=None, duration=0, node=None)
+        es.xpack.ml.close_job = mock.AsyncMock(side_effect=elasticsearch.BadRequestError(message=400, meta=error_meta, body="Bad Request"))
         es.perform_request = mock.AsyncMock()
 
         params = {
@@ -3474,8 +3484,8 @@ class TestCloseMlJob:
         await r(es, params)
 
         es.perform_request.assert_awaited_once_with(
-            "POST",
-            f"/_xpack/ml/anomaly_detectors/{params['job-id']}/_close",
+            method="POST",
+            path=f"/_xpack/ml/anomaly_detectors/{params['job-id']}/_close",
             params={"force": str(params["force"]).lower(), "timeout": params["timeout"]},
         )
 
@@ -3506,7 +3516,7 @@ class TestRawRequestRunner:
         params = {"path": "/_cat/count"}
         await r(es, params)
 
-        es.perform_request.assert_called_once_with(method="GET", url="/_cat/count", headers=None, body=None, params={})
+        es.perform_request.assert_called_once_with(method="GET", path="/_cat/count", headers=None, body=None, params={})
 
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
@@ -3525,7 +3535,7 @@ class TestRawRequestRunner:
         await r(es, params)
 
         es.perform_request.assert_called_once_with(
-            method="DELETE", url="/twitter", headers=None, body=None, params={"ignore": [400, 404], "pretty": "true"}
+            method="DELETE", path="/twitter", headers=None, body=None, params={"ignore": [400, 404], "pretty": "true"}
         )
 
     @mock.patch("elasticsearch.Elasticsearch")
@@ -3548,7 +3558,7 @@ class TestRawRequestRunner:
         await r(es, params)
 
         es.perform_request.assert_called_once_with(
-            method="POST", url="/twitter", headers=None, body={"settings": {"index": {"number_of_replicas": 0}}}, params={}
+            method="POST", path="/twitter", headers=None, body={"settings": {"index": {"number_of_replicas": 0}}}, params={}
         )
 
     @mock.patch("elasticsearch.Elasticsearch")
@@ -3571,7 +3581,7 @@ class TestRawRequestRunner:
 
         es.perform_request.assert_called_once_with(
             method="GET",
-            url="/_msearch",
+            path="/_msearch",
             headers={"Content-Type": "application/x-ndjson"},
             body=[
                 {"index": "test"},
@@ -3604,7 +3614,7 @@ class TestRawRequestRunner:
 
         es.perform_request.assert_called_once_with(
             method="GET",
-            url="/_msearch",
+            path="/_msearch",
             headers={"Content-Type": "application/x-ndjson", "x-opaque-id": "test-id1"},
             body=[
                 {"index": "test"},
@@ -4962,7 +4972,7 @@ class TestSqlRunner:
 
         assert result == {"success": True, "weight": 1, "unit": "ops"}
 
-        es.perform_request.assert_awaited_once_with("POST", "/_sql", body=params["body"])
+        es.perform_request.assert_awaited_once_with(method="POST", path="/_sql", body=params["body"])
 
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
