@@ -1556,7 +1556,7 @@ class DeleteMlDatafeed(Runner):
         force = params.get("force", False)
         try:
             # we don't want to fail if a datafeed does not exist, thus we ignore 404s.
-            await es.xpack.ml.delete_datafeed(datafeed_id=datafeed_id, force=force, ignore=[404])
+            await es.ml.delete_datafeed(datafeed_id=datafeed_id, force=force, ignore=[404])
         except elasticsearch.BadRequestError:
             await es.perform_request(
                 method="DELETE",

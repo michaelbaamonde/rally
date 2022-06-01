@@ -27,6 +27,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
+from io import BytesIO
 from enum import Enum
 from typing import Callable
 
@@ -1930,7 +1931,13 @@ async def execute_single(runner, es, params, on_error):
         request_meta_data = {"success": False, "error-type": "api"}
 
         error_message = e.message
-        error_body = e.body
+        if isinstance(e.body, bytes):
+            error_body = e.body.decode("utf-8")
+        elif isinstance(e.body, BytesIO):
+            error_body = e.body.read().decode("utf-8")
+        else:
+            error_body = e.body
+
         if error_body:
             error_message += f" ({error_body})"
         error_description = error_message
