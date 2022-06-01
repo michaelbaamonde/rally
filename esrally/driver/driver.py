@@ -1930,7 +1930,13 @@ async def execute_single(runner, es, params, on_error):
         total_ops_unit = "ops"
         request_meta_data = {"success": False, "error-type": "api"}
 
-        error_message = e.message
+        if isinstance(e.message, bytes):
+            error_message = e.message.decode("utf-8")
+        elif isinstance(e.message, BytesIO):
+            error_message = e.message.read().decode("utf-8")
+        else:
+            error_message = e.message
+
         if isinstance(e.body, bytes):
             error_body = e.body.decode("utf-8")
         elif isinstance(e.body, BytesIO):
