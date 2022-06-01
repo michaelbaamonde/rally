@@ -361,9 +361,6 @@ class EsClientFactory:
         class VerifiedSyncElasticsearch(elasticsearch.Elasticsearch):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-
-                # Set to True initially so wait_for_rest_layer and self.info() will
-                # bypass the check done in the superclass's perform_request() method
                 self._verified_elasticsearch = None
 
                 if distro is not None:
@@ -413,6 +410,7 @@ class EsClientFactory:
                     if mimetype:
                         request_headers[header] = _COMPAT_MIMETYPE_RE.sub(_COMPAT_MIMETYPE_SUB, mimetype)
 
+                # Custom behavior for backwards compatibility
                 if self.distribution_version is not None and self.distribution_version >= versions.Version.from_string("8.0.0"):
                     mimetype_header_to_compat("Accept")
                     mimetype_header_to_compat("Content-Type")
