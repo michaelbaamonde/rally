@@ -1526,7 +1526,7 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET", "/_all/_search", params={"request_cache": "true"}, body=params["body"], headers=None
+            method="GET", path="/_all/_search", params={"request_cache": "true"}, body=params["body"], headers=None
         )
         es.clear_scroll.assert_not_called()
 
@@ -1573,8 +1573,8 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/_all/_search",
+            method="GET",
+            path="/_all/_search",
             params={"request_timeout": 3.0, "request_cache": "true"},
             body=params["body"],
             headers={"header1": "value1", "x-opaque-id": "test-id1"},
@@ -1626,8 +1626,8 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/_all/_search",
+            method="GET",
+            path="/_all/_search",
             params={
                 "request_cache": "false",
                 "q": "user:kimchy",
@@ -1680,8 +1680,8 @@ class TestQueryRunner:
         assert "error-type" not in result
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/_all/_search",
+            method="GET",
+            path="/_all/_search",
             params={
                 "q": "user:kimchy",
             },
@@ -1734,8 +1734,8 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/_all/_search",
+            method="GET",
+            path="/_all/_search",
             params={
                 "request_cache": "true",
             },
@@ -1791,8 +1791,8 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/unittest/_search",
+            method="GET",
+            path="/unittest/_search",
             params={},
             body=params["body"],
             headers={
@@ -1847,8 +1847,8 @@ class TestQueryRunner:
         }
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/unittest/type/_search",
+            method="GET",
+            path="/unittest/type/_search",
             body=params["body"],
             params={},
             headers=None,
@@ -1905,8 +1905,8 @@ class TestQueryRunner:
         assert "error-type" not in results
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/unittest/_search",
+            method="GET",
+            path="/unittest/_search",
             params={
                 "request_cache": "true",
                 "sort": "_doc",
@@ -1968,8 +1968,8 @@ class TestQueryRunner:
         assert "error-type" not in results
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/unittest/_search",
+            method="GET",
+            path="/unittest/_search",
             params={"sort": "_doc", "scroll": "10s", "size": 100},
             body=params["body"],
             headers={"Accept-Encoding": "identity"},
@@ -2025,8 +2025,8 @@ class TestQueryRunner:
         assert "error-type" not in results
 
         es.perform_request.assert_awaited_once_with(
-            "GET",
-            "/_all/_search",
+            method="GET",
+            path="/_all/_search",
             params={
                 "sort": "_doc",
                 "scroll": "10s",
@@ -2976,11 +2976,7 @@ class TestDeleteComponentTemplateRunner:
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
     async def test_deletes_only_existing_index_templates(self, es):
-        async def _side_effect(http_method, path):
-            if http_method == "HEAD":
-                return path == "/_component_template/templateB"
-
-        es.perform_request = mock.AsyncMock(side_effect=_side_effect)
+        es.cluster.exists_component_template = mock.AsyncMock(side_effect=[False, True])
         es.cluster.delete_component_template = mock.AsyncMock()
 
         r = runner.DeleteComponentTemplate()
@@ -4983,9 +4979,9 @@ class TestSqlRunner:
 
         es.perform_request.assert_has_calls(
             [
-                mock.call("POST", "/_sql", body=params["body"]),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
+                mock.call(method="POST", path="/_sql", body=params["body"]),
+                mock.call(method="POST", path="/_sql", body={"cursor": self.default_response["cursor"]}),
+                mock.call(method="POST", path="/_sql", body={"cursor": self.default_response["cursor"]}),
             ]
         )
 
@@ -5013,8 +5009,8 @@ class TestSqlRunner:
 
         es.perform_request.assert_has_calls(
             [
-                mock.call("POST", "/_sql", body=params["body"]),
-                mock.call("POST", "/_sql", body={"cursor": self.default_response["cursor"]}),
+                mock.call(method="POST", path="/_sql", body=params["body"]),
+                mock.call(method="POST", path="/_sql", body={"cursor": self.default_response["cursor"]}),
             ]
         )
 
@@ -5253,8 +5249,8 @@ class TestQueryWithSearchAfterScroll:
         es.perform_request.assert_has_awaits(
             [
                 mock.call(
-                    "GET",
-                    "/_search",
+                    method="GET",
+                    path="/_search",
                     params={},
                     body={
                         "query": {
@@ -5275,8 +5271,8 @@ class TestQueryWithSearchAfterScroll:
                     headers=None,
                 ),
                 mock.call(
-                    "GET",
-                    "/_search",
+                    method="GET",
+                    path="/_search",
                     params={},
                     body={
                         "query": {
@@ -5357,8 +5353,8 @@ class TestQueryWithSearchAfterScroll:
         es.perform_request.assert_has_awaits(
             [
                 mock.call(
-                    "GET",
-                    "/test-index-1/_search",
+                    method="GET",
+                    path="/test-index-1/_search",
                     params={},
                     body={
                         "query": {
@@ -5372,8 +5368,8 @@ class TestQueryWithSearchAfterScroll:
                     headers=None,
                 ),
                 mock.call(
-                    "GET",
-                    "/test-index-1/_search",
+                    method="GET",
+                    path="/test-index-1/_search",
                     params={},
                     body={
                         "query": {
@@ -5608,8 +5604,8 @@ class TestComposite:
 
         es.perform_request.assert_has_awaits(
             [
-                mock.call(method="GET", url="/", headers=None, body={}, params={}),
-                mock.call("GET", "/test/_search", params={}, body={"query": {"match_all": {}}}, headers=None),
+                mock.call(method="GET", path="/", headers=None, body={}, params={}),
+                mock.call(method="GET", path="/test/_search", params={}, body={"query": {"match_all": {}}}, headers=None),
             ]
         )
 
@@ -5668,8 +5664,8 @@ class TestComposite:
         es.perform_request.assert_has_awaits(
             [
                 mock.call(
-                    "GET",
-                    "/test/_search",
+                    method="GET",
+                    path="/test/_search",
                     params={},
                     body={
                         "query": {
@@ -6018,10 +6014,10 @@ class TestRetry:
     async def test_retries_on_timeout_if_wanted_and_raises_if_no_recovery(self):
         delegate = mock.AsyncMock(
             side_effect=[
-                elasticsearch.ConnectionError("N/A", "no route to host"),
-                elasticsearch.ConnectionError("N/A", "no route to host"),
-                elasticsearch.ConnectionError("N/A", "no route to host"),
-                elasticsearch.ConnectionError("N/A", "no route to host"),
+                elasticsearch.ConnectionError(message="no route to host"),
+                elasticsearch.ConnectionError(message="no route to host"),
+                elasticsearch.ConnectionError(message="no route to host"),
+                elasticsearch.ConnectionError(message="no route to host"),
             ]
         )
         es = None
@@ -6045,7 +6041,7 @@ class TestRetry:
 
         delegate = mock.AsyncMock(
             side_effect=[
-                elasticsearch.ConnectionError("N/A", "no route to host"),
+                elasticsearch.ConnectionError(message="no route to host"),
                 failed_return_value,
             ]
         )
@@ -6067,7 +6063,7 @@ class TestRetry:
 
     @pytest.mark.asyncio
     async def test_retries_mixed_timeout_and_application_errors(self):
-        connection_error = elasticsearch.ConnectionError("N/A", "no route to host")
+        connection_error = elasticsearch.ConnectionError(message="no route to host")
         failed_return_value = {"weight": 1, "unit": "ops", "success": False}
         success_return_value = {"weight": 1, "unit": "ops", "success": False}
 

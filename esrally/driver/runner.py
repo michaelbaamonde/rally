@@ -202,9 +202,9 @@ class Runner:
 
     def _transport_request_params(self, params):
         request_params = params.get("request-params", {})
-        # request_timeout = params.get("request-timeout")
-        # if request_timeout is not None:
-        #     request_params["request_timeout"] = request_timeout
+        request_timeout = params.get("request-timeout")
+        if request_timeout is not None:
+            request_params["request_timeout"] = request_timeout
         headers = params.get("headers") or {}
         opaque_id = params.get("opaque-id")
         if opaque_id is not None:
@@ -1307,20 +1307,12 @@ class DeleteComponentTemplate(Runner):
         only_if_exists = mandatory(params, "only-if-exists", self)
         request_params = mandatory(params, "request-params", self)
 
-        async def _exists(name):
-            # pylint: disable=import-outside-toplevel
-            # TODO
-            from elasticsearch.client import _make_path
-
-            # currently not supported by client and hence custom request
-            return await es.perform_request(method="HEAD", path=_make_path("_component_template", name))
-
         ops_count = 0
         for template_name in template_names:
             if not only_if_exists:
                 await es.cluster.delete_component_template(name=template_name, params=request_params, ignore=[404])
                 ops_count += 1
-            elif only_if_exists and await _exists(template_name):
+            elif only_if_exists and await es.cluster.exists_component_template(name=template_name):
                 self.logger.info("Component Index template [%s] already exists. Deleting it.", template_name)
                 await es.cluster.delete_component_template(name=template_name, params=request_params)
                 ops_count += 1
