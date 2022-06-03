@@ -47,7 +47,7 @@ class TestEsClientFactory:
 
         f = client.EsClientFactory(hosts, client_options)
 
-        assert f.hosts == ["http://127.0.0.1:9200"]
+        assert f.hosts == ["http://localhost:9200"]
         assert f.ssl_context is None
         assert "basic_auth" not in f.client_options
 
@@ -79,7 +79,7 @@ class TestEsClientFactory:
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
 
-        assert f.hosts == ["https://127.0.0.1:9200"]
+        assert f.hosts == ["https://localhost:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
@@ -120,7 +120,7 @@ class TestEsClientFactory:
             keyfile=client_options["client_key"],
         )
 
-        assert f.hosts == ["https://127.0.0.1:9200"]
+        assert f.hosts == ["https://localhost:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
@@ -160,7 +160,7 @@ class TestEsClientFactory:
         assert (
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
-        assert f.hosts == ["https://127.0.0.1:9200"]
+        assert f.hosts == ["https://localhost:9200"]
         assert f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
@@ -231,7 +231,7 @@ class TestEsClientFactory:
             not mocked_load_cert_chain.called
         ), "ssl_context.load_cert_chain should not have been called as we have not supplied client certs"
 
-        assert f.hosts == ["https://127.0.0.1:9200"]
+        assert f.hosts == ["https://localhost:9200"]
         assert not f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_NONE
 
@@ -272,7 +272,7 @@ class TestEsClientFactory:
             keyfile=client_options["client_key"],
         )
 
-        assert f.hosts == ["https://127.0.0.1:9200"]
+        assert f.hosts == ["https://localhost:9200"]
         assert not f.ssl_context.check_hostname
         assert f.ssl_context.verify_mode == ssl.CERT_NONE
 
@@ -310,7 +310,7 @@ class TestEsClientFactory:
         }
 
         f = client.EsClientFactory(hosts, client_options)
-        assert f.hosts == hosts
+        assert f.hosts == ["https://127.0.0.1:9200"]
         assert f.ssl_context.check_hostname is False
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
