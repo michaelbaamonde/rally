@@ -1187,7 +1187,7 @@ class CreateDataStream(Runner):
         data_streams = mandatory(params, "data-streams", self)
         request_params = mandatory(params, "request-params", self)
         for data_stream in data_streams:
-            await es.indices.create_data_stream(data_stream, params=request_params)
+            await es.indices.create_data_stream(name=data_stream, params=request_params)
         return {
             "weight": len(data_streams),
             "unit": "ops",
@@ -1262,11 +1262,11 @@ class DeleteDataStream(Runner):
 
         for data_stream in data_streams:
             if not only_if_exists:
-                await es.indices.delete_data_stream(data_stream, ignore=[404], params=request_params)
+                await es.indices.delete_data_stream(name=data_stream, ignore=[404], params=request_params)
                 ops += 1
             elif only_if_exists and await es.indices.exists(index=data_stream):
                 self.logger.info("Data stream [%s] already exists. Deleting it.", data_stream)
-                await es.indices.delete_data_stream(data_stream, params=request_params)
+                await es.indices.delete_data_stream(name=data_stream, params=request_params)
                 ops += 1
 
         return {
@@ -1366,7 +1366,7 @@ class DeleteComposableTemplate(Runner):
             if not only_if_exists:
                 await es.indices.delete_index_template(name=template_name, params=request_params, ignore=[404])
                 ops_count += 1
-            elif only_if_exists and await es.indices.exists_index_template(template_name):
+            elif only_if_exists and await es.indices.exists_index_template(name=template_name):
                 self.logger.info("Composable Index template [%s] already exists. Deleting it.", template_name)
                 await es.indices.delete_index_template(name=template_name, params=request_params)
                 ops_count += 1
@@ -1462,7 +1462,7 @@ class ShrinkIndex(Runner):
 
     async def __call__(self, es, params):
         source_index = mandatory(params, "source-index", self)
-        source_indices_get = await es.indices.get(source_index)
+        source_indices_get = await es.indices.get(index=source_index)
         source_indices = list(source_indices_get.keys())
         source_indices_stem = commonprefix(source_indices)
 
