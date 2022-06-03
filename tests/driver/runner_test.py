@@ -2625,8 +2625,8 @@ class TestCreateDataStreamRunner:
 
         es.indices.create_data_stream.assert_has_awaits(
             [
-                mock.call("data-stream-A", params=request_params),
-                mock.call("data-stream-B", params=request_params),
+                mock.call(name="data-stream-A", params=request_params),
+                mock.call(name="data-stream-B", params=request_params),
             ]
         )
 
@@ -2732,7 +2732,7 @@ class TestDeleteDataStreamRunner:
             "success": True,
         }
 
-        es.indices.delete_data_stream.assert_awaited_once_with("data-stream-B", params={})
+        es.indices.delete_data_stream.assert_awaited_once_with(name="data-stream-B", params={})
 
     @mock.patch("elasticsearch.Elasticsearch")
     @pytest.mark.asyncio
@@ -2758,8 +2758,8 @@ class TestDeleteDataStreamRunner:
 
         es.indices.delete_data_stream.assert_has_awaits(
             [
-                mock.call("data-stream-A", ignore=[404], params=params["request-params"]),
-                mock.call("data-stream-B", ignore=[404], params=params["request-params"]),
+                mock.call(name="data-stream-A", ignore=[404], params=params["request-params"]),
+                mock.call(name="data-stream-B", ignore=[404], params=params["request-params"]),
             ]
         )
         assert es.indices.exists.await_count == 0
