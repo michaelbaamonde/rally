@@ -264,7 +264,18 @@ class EsClientFactory:
             return False
 
     def create(self):
-        return RallySyncElasticsearch(distribution_version=self.distribution_version, hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
+
+        distro = self.distribution_version
+
+        class VersionedSyncClient(RallySyncElasticsearch):
+            def __init__(self, *args, **kwargs):
+                if distro is not None:
+                    self.distribution_version = versions.Version.from_string(distro)
+                else:
+                    self.distribution_version = None
+                super().__init__(*args, **kwargs)
+
+        return VersionedSyncClient(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
 
     def create_async(self):
         # pylint: disable=import-outside-toplevel
@@ -301,7 +312,7 @@ class EsClientFactory:
         self.client_options["trace_config"] = trace_config
 
         client_options = self.client_options
-        #distro = self.distribution_version
+        distro = self.distribution_version
 
         class RallyAsyncTransport(elastic_transport.AsyncTransport):
             def __init__(self, *args, **kwargs):
