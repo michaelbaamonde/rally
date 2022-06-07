@@ -2299,8 +2299,10 @@ class DiskUsageStats(TelemetryDevice):
             self.logger.exception(msg)
             raise exceptions.RallyError(msg)
 
-        del response["_shards"]
-        for index, idx_fields in response.items():
+        raw_response = response.raw
+
+        del raw_response["_shards"]
+        for index, idx_fields in raw_response.items():
             for field, field_info in idx_fields["fields"].items():
                 meta = {"index": index, "field": field}
                 self.metrics_store.put_value_cluster_level("disk_usage_total", field_info["total_in_bytes"], meta_data=meta, unit="byte")
