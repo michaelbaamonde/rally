@@ -48,88 +48,7 @@ from esrally import doc_link, exceptions
 from esrally.client_utils import _WARNING_RE, _COMPAT_MIMETYPE_RE, _COMPAT_MIMETYPE_SUB, _COMPAT_MIMETYPE_TEMPLATE, _mimetype_header_to_compat, _quote_query
 from esrally.utils import console, convert, versions
 from esrally.sync_connection import _ProductChecker, RallySyncElasticsearch
-
-class RequestContextManager:
-    """
-    Ensures that request context span the defined scope and allow nesting of request contexts with proper propagation.
-    This means that we can span a top-level request context, open sub-request contexts that can be used to measure
-    individual timings and still measure the proper total time on the top-level request context.
-    """
-
-    def __init__(self, request_context_holder):
-        self.ctx_holder = request_context_holder
-        self.ctx = None
-        self.token = None
-
-    async def __aenter__(self):
-        self.ctx, self.token = self.ctx_holder.init_request_context()
-        return self
-
-    @property
-    def request_start(self):
-        return self.ctx["request_start"]
-
-    @property
-    def request_end(self):
-        return self.ctx["request_end"]
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        # propagate earliest request start and most recent request end to parent
-        request_start = self.request_start
-        request_end = self.request_end
-        self.ctx_holder.restore_context(self.token)
-        # don't attempt to restore these values on the top-level context as they don't exist
-        if self.token.old_value != contextvars.Token.MISSING:
-            self.ctx_holder.update_request_start(request_start)
-            self.ctx_holder.update_request_end(request_end)
-        self.token = None
-        return False
-
-
-class RequestContextHolder:
-    """
-    Holds request context variables. This class is only meant to be used together with RequestContextManager.
-    """
-
-    request_context = contextvars.ContextVar("rally_request_context")
-
-    def new_request_context(self):
-        return RequestContextManager(self)
-
-    @classmethod
-    def init_request_context(cls):
-        ctx = {}
-        token = cls.request_context.set(ctx)
-        return ctx, token
-
-    @classmethod
-    def restore_context(cls, token):
-        cls.request_context.reset(token)
-
-    @classmethod
-    def update_request_start(cls, new_request_start):
-        meta = cls.request_context.get()
-        # this can happen if multiple requests are sent on the wire for one logical request (e.g. scrolls)
-        if "request_start" not in meta:
-            meta["request_start"] = new_request_start
-
-    @classmethod
-    def update_request_end(cls, new_request_end):
-        meta = cls.request_context.get()
-        meta["request_end"] = new_request_end
-
-    @classmethod
-    def on_request_start(cls):
-        cls.update_request_start(time.perf_counter())
-
-    @classmethod
-    def on_request_end(cls):
-        cls.update_request_end(time.perf_counter())
-
-    @classmethod
-    def return_raw_response(cls):
-        ctx = cls.request_context.get()
-        ctx["raw_response"] = True
+from esrally.async_connection import RallyAsyncElasticsearch
 
 
 class EsClientFactory:
@@ -335,124 +254,19 @@ class EsClientFactory:
 
                 super().__init__(*new_args, node_class=esrally.async_connection.RallyAiohttpHttpNode, **kwargs)
 
-        class RallyAsyncElasticsearch(elasticsearch.AsyncElasticsearch, RequestContextHolder):
-            def __init__(self, *args, distribution_version=None, **kwargs):
-                if distribution_version is not None:
-                    self.distribution_version = versions.Version.from_string(distribution_version)
+        class VersionedAsyncClient(RallyAsyncElasticsearch):
+            def __init__(self, *args, **kwargs):
+                if distro is not None:
+                    self.distribution_version = versions.Version.from_string(distro)
                 else:
                     self.distribution_version = None
-
                 super().__init__(*args, **kwargs)
-                # skip verification at this point; we've already verified this earlier with the synchronous client.
-                # The async client is used in the hot code path and we use customized overrides (such as that we don't
-                # parse response bodies in some cases for performance reasons, e.g. when using the bulk API).
-                self._verified_elasticsearch = True
-
-            async def perform_request(
-                self,
-                method: str,
-                path: str,
-                *,
-                params: Optional[Mapping[str, Any]] = None,
-                headers: Optional[Mapping[str, str]] = None,
-                body: Optional[Any] = None,
-            ) -> ApiResponse[Any]:
-
-                print(f"ASYNC VERSION: {self.distribution_version}")
-
-                # We need to ensure that we provide content-type and accept headers
-                if body is not None:
-                    if headers is None:
-                        headers = {"content-type": "application/json", "accept": "application/json"}
-                    else:
-                        if headers.get("content-type") is None:
-                            headers["content-type"] = "application/json"
-                        if headers.get("accept") is None:
-                            headers["accept"] = "application/json"
-
-                if headers:
-                    request_headers = self._headers.copy()
-                    request_headers.update(headers)
-                else:
-                    request_headers = self._headers
-
-                if self.distribution_version is not None and self.distribution_version >= versions.Version.from_string("8.0.0"):
-                    _mimetype_header_to_compat("Accept", request_headers)
-                    _mimetype_header_to_compat("Content-Type", request_headers)
-
-                if params:
-                    target = f"{path}?{_quote_query(params)}"
-                else:
-                    target = path
-
-                meta, resp_body = await self.transport.perform_request(
-                    method,
-                    target,
-                    headers=request_headers,
-                    body=body,
-                    request_timeout=self._request_timeout,
-                    max_retries=self._max_retries,
-                    retry_on_status=self._retry_on_status,
-                    retry_on_timeout=self._retry_on_timeout,
-                    client_meta=self._client_meta,
-                )
-
-                # HEAD with a 404 is returned as a normal response
-                # since this is used as an 'exists' functionality.
-                if not (method == "HEAD" and meta.status == 404) and (
-                    not 200 <= meta.status < 299
-                    and (self._ignore_status is DEFAULT or self._ignore_status is None or meta.status not in self._ignore_status)
-                ):
-                    message = str(resp_body)
-
-                    # If the response is an error response try parsing
-                    # the raw Elasticsearch error before raising.
-                    if isinstance(resp_body, dict):
-                        try:
-                            error = resp_body.get("error", message)
-                            if isinstance(error, dict) and "type" in error:
-                                error = error["type"]
-                            message = error
-                        except (ValueError, KeyError, TypeError):
-                            pass
-
-                    raise HTTP_EXCEPTIONS.get(meta.status, ApiError)(message=message, meta=meta, body=resp_body)
-
-                # 'Warning' headers should be reraised as 'ElasticsearchWarning'
-                if "warning" in meta.headers:
-                    warning_header = (meta.headers.get("warning") or "").strip()
-                    warning_messages: Iterable[str] = _WARNING_RE.findall(warning_header) or (warning_header,)
-                    stacklevel = warn_stacklevel()
-                    for warning_message in warning_messages:
-                        warnings.warn(
-                            warning_message,
-                            category=ElasticsearchWarning,
-                            stacklevel=stacklevel,
-                        )
-
-                if method == "HEAD":
-                    response = HeadApiResponse(meta=meta)
-                elif isinstance(resp_body, dict):
-                    response = ObjectApiResponse(body=resp_body, meta=meta)  # type: ignore[assignment]
-                elif isinstance(resp_body, list):
-                    response = ListApiResponse(body=resp_body, meta=meta)  # type: ignore[assignment]
-                elif isinstance(resp_body, str):
-                    response = TextApiResponse(  # type: ignore[assignment]
-                        body=resp_body,
-                        meta=meta,
-                    )
-                elif isinstance(resp_body, bytes):
-                    response = BinaryApiResponse(body=resp_body, meta=meta)  # type: ignore[assignment]
-                else:
-                    response = ApiResponse(body=resp_body, meta=meta)  # type: ignore[assignment]
-
-                return response
 
         # max_connections and trace_config are not valid kwargs, so we pop them
         max = self.client_options.pop("max_connections")
         self.client_options.pop("trace_config")
 
-        return RallyAsyncElasticsearch(
+        return VersionedAsyncClient(
             hosts=self.hosts,
             transport_class=RallyAsyncTransport,
             ssl_context=self.ssl_context,
