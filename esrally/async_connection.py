@@ -283,8 +283,7 @@ class RallyAiohttpHttpNode(elastic_transport.AiohttpHttpNode):
     def __init__(self, config):
         super().__init__(config)
 
-        self._loop = asyncio.get_running_loop()
-        self._limit = None
+        self._loop = None
 
         client_options = config._extras.get("_rally_client_options")
         if client_options:
@@ -307,14 +306,16 @@ class RallyAiohttpHttpNode(elastic_transport.AiohttpHttpNode):
             self._response_class = RawClientResponse
 
     def _create_aiohttp_session(self):
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+
         if self.use_static_responses:
-            connector = StaticConnector(limit=self._limit, enable_cleanup_closed=self._enable_cleanup_closed)
+            connector = StaticConnector(limit_per_host=self._connections_per_node, enable_cleanup_closed=self._enable_cleanup_closed)
         else:
             connector = aiohttp.TCPConnector(
-                limit=self._limit,
+                limit_per_host=self._connections_per_node,
                 use_dns_cache=True,
-                # May need to be just ssl=self._ssl_context
-                ssl_context=self._ssl_context,
+                ssl=self._ssl_context,
                 enable_cleanup_closed=self._enable_cleanup_closed,
             )
 
