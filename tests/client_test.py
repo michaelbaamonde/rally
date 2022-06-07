@@ -30,7 +30,7 @@ import trustme
 import urllib3.exceptions
 from pytest_httpserver import HTTPServer
 
-from esrally import client, doc_link, exceptions
+from esrally import client, doc_link, exceptions, async_connection
 from esrally.utils import console
 
 
@@ -390,7 +390,7 @@ class TestEsClientAgainstHTTPSServer:
 class TestRequestContextManager:
     @pytest.mark.asyncio
     async def test_propagates_nested_context(self):
-        test_client = client.RequestContextHolder()
+        test_client = async_connection.RequestContextHolder()
         async with test_client.new_request_context() as top_level_ctx:
             test_client.on_request_start()
             await asyncio.sleep(0.01)

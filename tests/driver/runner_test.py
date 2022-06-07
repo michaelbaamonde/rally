@@ -28,7 +28,7 @@ import elastic_transport
 import elasticsearch
 import pytest
 
-from esrally import client, exceptions
+from esrally import client, exceptions, async_connection
 from esrally.driver import runner
 
 
@@ -5760,7 +5760,7 @@ class TestComposite:
     async def test_adds_request_timings(self):
         # We only need the request context holder functionality but not any calls to Elasticsearch.
         # Therefore we can use the the request context holder as a substitute and get proper timing info.
-        es = client.RequestContextHolder()
+        es = async_connection.RequestContextHolder()
 
         params = {
             "requests": [

@@ -4271,7 +4271,7 @@ class TestDiskUsageStats:
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert c.kwargs == [
+        assert es.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4287,7 +4287,7 @@ class TestDiskUsageStats:
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert c.kwargs == [
+        assert es.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4303,7 +4303,7 @@ class TestDiskUsageStats:
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert c.kwargs == [
+        assert es.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
