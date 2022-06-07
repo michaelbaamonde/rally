@@ -460,7 +460,7 @@ class CcrStatsRecorder:
         try:
             ccr_stats_api_endpoint = "/_ccr/stats"
             filter_path = "follow_stats"
-            stats = self.client.transport.perform_request(
+            stats = self.client.perform_request(
                 method="GET", path=ccr_stats_api_endpoint, params={"human": "false", "filter_path": filter_path}
             )
         except elasticsearch.TransportError:
@@ -1233,7 +1233,7 @@ class SearchableSnapshotsStatsRecorder:
             # we don't use the existing client support (searchable_snapshots.stats())
             # as the API is deliberately undocumented and might change:
             # https://www.elastic.co/guide/en/elasticsearch/reference/current/searchable-snapshots-api-stats.html
-            stats = self.client.transport.perform_request(method="GET", path=stats_api_endpoint, params={"level": level})
+            stats = self.client.perform_request(method="GET", path=stats_api_endpoint, params={"level": level})
         except elasticsearch.NotFoundError as e:
             if "No searchable snapshots indices found" in e.info.get("error").get("reason"):
                 self.logger.info(
@@ -2276,7 +2276,7 @@ class DiskUsageStats(TelemetryDevice):
         for index in self.indices.split(","):
             self.logger.debug("Gathering disk usage for [%s]", index)
             try:
-                response = self.client.transport.perform_request(
+                response = self.client.perform_request(
                     method="POST", path=f"/{index}/_disk_usage", params={"run_expensive_tasks": "true"}
                 )
             except elasticsearch.RequestError:
