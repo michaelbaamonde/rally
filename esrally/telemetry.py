@@ -16,6 +16,7 @@
 # under the License.
 
 import collections
+import copy
 import fnmatch
 import logging
 import os
@@ -2293,7 +2294,7 @@ class DiskUsageStats(TelemetryDevice):
             raise exceptions.RallyError(msg)
 
     def handle_telemetry_usage(self, response):
-        raw_response = response.raw
+        raw_response = copy.deepcopy(response.body)
         if raw_response["_shards"]["failed"] > 0:
             failures = str(response["_shards"]["failures"])
             msg = f"Shards failed when fetching disk usage: {failures}"
