@@ -25,6 +25,7 @@ from unittest.mock import call
 
 import elasticsearch
 import pytest
+from elastic_transport import ObjectApiResponse
 
 from esrally import config, exceptions, metrics, telemetry
 from esrally.mechanic import cluster
@@ -150,17 +151,29 @@ class TestStartupTime:
 
 
 class Client:
-    def __init__(self, nodes=None, info=None, indices=None, transform=None, cluster=None, transport_client=None):
+    def __init__(self, nodes=None, info=None, indices=None, transform=None, cluster=None, transport_client=None, response=None, force_error=False, error=elasticsearch.TransportError(message="transport error")):
         self.nodes = nodes
         self._info = wrap(info)
         self.indices = indices
         self.transform = transform
         self.cluster = cluster
-        if transport_client:
-            self.transport = transport_client
+
+        self._response = ObjectApiResponse(body=response, meta=None)
+        self._force_error = force_error
+        self._error = error
+        self.args = []
+        self.kwargs = []
 
     def info(self):
         return self._info()
+
+    def perform_request(self, *args, **kwargs):
+        self.args.append(args)
+        self.kwargs.append(kwargs)
+        if self._force_error:
+            raise self._error
+        else:
+            return self._response
 
 
 class SubClient:
@@ -396,7 +409,7 @@ class TestCcrStatsRecorder:
     java_signed_maxlong = (2**63) - 1
 
     def test_raises_exception_on_transport_error(self):
-        client = Client(transport_client=TransportClient(response={}, force_error=True))
+        client = Client(response={}, force_error=True)
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         with pytest.raises(
@@ -484,7 +497,7 @@ class TestCcrStatsRecorder:
 
         ccr_stats_filtered_follower_response = {"follow_stats": ccr_stats_follower_response["follow_stats"]}
 
-        client = Client(transport_client=TransportClient(response=ccr_stats_filtered_follower_response))
+        client = Client(response=ccr_stats_filtered_follower_response)
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         recorder = telemetry.CcrStatsRecorder(cluster_name="remote", client=client, metrics_store=metrics_store, sample_interval=1)
@@ -579,7 +592,7 @@ class TestCcrStatsRecorder:
 
         ccr_stats_filtered_follower_response = {"follow_stats": ccr_stats_follower_response["follow_stats"]}
 
-        client = Client(transport_client=TransportClient(response=ccr_stats_filtered_follower_response))
+        client = Client(response=ccr_stats_filtered_follower_response)
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         recorder = telemetry.CcrStatsRecorder("remote", client, metrics_store, 1)
@@ -721,7 +734,7 @@ class TestCcrStatsRecorder:
         }
 
         ccr_stats_filtered_follower_response = {"follow_stats": ccr_stats_follower_response["follow_stats"]}
-        client = Client(transport_client=TransportClient(response=ccr_stats_follower_response))
+        client = Client(response=ccr_stats_follower_response)
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         recorder = telemetry.CcrStatsRecorder("remote", client, metrics_store, 1, indices=[follower_index1])
@@ -1643,7 +1656,7 @@ class TestSearchableSnapshotsStats:
         response = {}
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        client = Client(transport_client=TransportClient(response=response))
+        client = Client(response=response)
         recorder = telemetry.SearchableSnapshotsStatsRecorder(
             cluster_name="default", client=client, metrics_store=metrics_store, sample_interval=1, indices=["logs*"]
         )
@@ -1657,10 +1670,8 @@ class TestSearchableSnapshotsStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         client = Client(
-            transport_client=TransportClient(
                 force_error=True, error=elasticsearch.NotFoundError("", "", {"error": {"reason": "No searchable snapshots indices found"}})
             )
-        )
         recorder = telemetry.SearchableSnapshotsStatsRecorder(
             cluster_name="default", client=client, metrics_store=metrics_store, sample_interval=1, indices=["logs*"]
         )
@@ -1680,7 +1691,7 @@ class TestSearchableSnapshotsStats:
 
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        client = Client(transport_client=TransportClient(response=response))
+        client = Client(response=response)
 
         recorder = telemetry.SearchableSnapshotsStatsRecorder(
             cluster_name="leader", client=client, metrics_store=metrics_store, sample_interval=1
@@ -1709,7 +1720,7 @@ class TestSearchableSnapshotsStats:
 
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        client = Client(transport_client=TransportClient(response=response))
+        client = Client(response=response)
 
         recorder = telemetry.SearchableSnapshotsStatsRecorder(
             cluster_name="default",
@@ -4241,13 +4252,12 @@ class TestDiskUsageStats:
     def test_uses_indices_by_default(self, es):
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        tc = TransportClient(response={"_shards": {"failed": 0}})
-        c = Client(transport_client=tc)
+        c = Client(response={"_shards": {"failed": 0}})
         device = telemetry.DiskUsageStats({}, c, metrics_store, index_names=["foo", "bar"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert tc.kwargs == [
+        assert c.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4256,13 +4266,12 @@ class TestDiskUsageStats:
     def test_uses_data_streams_by_default(self, es):
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        tc = TransportClient(response={"_shards": {"failed": 0}})
-        es = Client(transport_client=tc)
+        es = Client(response={"_shards": {"failed": 0}})
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=[], data_stream_names=["foo", "bar"])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert tc.kwargs == [
+        assert c.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4271,15 +4280,14 @@ class TestDiskUsageStats:
     def test_uses_indices_param_if_specified_instead_of_index_names(self, es):
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        tc = TransportClient(response={"_shards": {"failed": 0}})
-        es = Client(transport_client=tc)
+        es = Client(response={"_shards": {"failed": 0}})
         device = telemetry.DiskUsageStats(
             {"disk-usage-stats-indices": "foo,bar"}, es, metrics_store, index_names=["baz"], data_stream_names=[]
         )
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert tc.kwargs == [
+        assert c.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4288,15 +4296,14 @@ class TestDiskUsageStats:
     def test_uses_indices_param_if_specified_instead_of_data_stream_names(self, es):
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
-        tc = TransportClient(response={"_shards": {"failed": 0}})
-        es = Client(transport_client=tc)
+        es = Client(response={"_shards": {"failed": 0}})
         device = telemetry.DiskUsageStats(
             {"disk-usage-stats-indices": "foo,bar"}, es, metrics_store, index_names=[], data_stream_names=["baz"]
         )
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
         t.on_benchmark_stop()
-        assert tc.kwargs == [
+        assert c.kwargs == [
             {"method": "POST", "path": "/foo/_disk_usage", "params": {"run_expensive_tasks": "true"}},
             {"method": "POST", "path": "/bar/_disk_usage", "params": {"run_expensive_tasks": "true"}},
         ]
@@ -4306,11 +4313,9 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 force_error=True,
                 error=elasticsearch.RequestError(message="400", meta=None, body=None),
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4323,10 +4328,8 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 force_error=True,
                 error=elasticsearch.RequestError(message="400", meta=None, body=None),
-            )
         )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=[], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
@@ -4339,8 +4342,7 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(force_error=True, error=elasticsearch.RequestError(message="400", meta=None, body=None))
-        )
+            force_error=True, error=elasticsearch.RequestError(message="400", meta=None, body=None))
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo", "bar"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4366,11 +4368,11 @@ class TestDiskUsageStats:
                 else:
                     return self.rest.perform_request(args, kwargs)
 
-        not_found_transport_client = TransportClient(
+        not_found_transport_client = Client(
             force_error=True,
             error=elasticsearch.NotFoundError(message="404", meta=None, body=None),
         )
-        successful_client = TransportClient(
+        successful_client = Client(
             response={
                 "_shards": {"failed": 0},
                 "foo": {
@@ -4397,12 +4399,10 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"total": 1, "successful": 1, "failed": 0},
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4414,12 +4414,10 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"total": 1, "successful": 0, "failed": 1, "failures": "hello there!"},
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4432,7 +4430,6 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"failed": 0},
                     "foo": {
@@ -4445,7 +4442,6 @@ class TestDiskUsageStats:
                     },
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4460,7 +4456,6 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"failed": 0},
                     "foo": {
@@ -4474,7 +4469,6 @@ class TestDiskUsageStats:
                     },
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4495,7 +4489,6 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"failed": 0},
                     "foo": {
@@ -4511,7 +4504,6 @@ class TestDiskUsageStats:
                     },
                 }
             )
-        )
         device = telemetry.DiskUsageStats({"disk-usage-stats-indices": "foo"}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4525,7 +4517,6 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"failed": 0},
                     "foo": {
@@ -4539,7 +4530,6 @@ class TestDiskUsageStats:
                     },
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
@@ -4555,7 +4545,6 @@ class TestDiskUsageStats:
         cfg = create_config()
         metrics_store = metrics.EsMetricsStore(cfg)
         es = Client(
-            transport_client=TransportClient(
                 response={
                     "_shards": {"failed": 0},
                     "foo": {
@@ -4569,7 +4558,6 @@ class TestDiskUsageStats:
                     },
                 }
             )
-        )
         device = telemetry.DiskUsageStats({}, es, metrics_store, index_names=["foo"], data_stream_names=[])
         t = telemetry.Telemetry(enabled_devices=[device.command], devices=[device])
         t.on_benchmark_start()
