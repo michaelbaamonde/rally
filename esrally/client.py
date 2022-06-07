@@ -45,10 +45,17 @@ from elasticsearch.exceptions import (
 from urllib3.connection import is_ipaddress
 
 from esrally import doc_link, exceptions
-from esrally.client_utils import _WARNING_RE, _COMPAT_MIMETYPE_RE, _COMPAT_MIMETYPE_SUB, _COMPAT_MIMETYPE_TEMPLATE, _mimetype_header_to_compat, _quote_query
-from esrally.utils import console, convert, versions
-from esrally.sync_connection import _ProductChecker, RallySyncElasticsearch
 from esrally.async_connection import RallyAsyncElasticsearch
+from esrally.client_utils import (
+    _COMPAT_MIMETYPE_RE,
+    _COMPAT_MIMETYPE_SUB,
+    _COMPAT_MIMETYPE_TEMPLATE,
+    _WARNING_RE,
+    _mimetype_header_to_compat,
+    _quote_query,
+)
+from esrally.sync_connection import RallySyncElasticsearch, _ProductChecker
+from esrally.utils import console, convert, versions
 
 
 class EsClientFactory:
@@ -183,7 +190,6 @@ class EsClientFactory:
             return False
 
     def create(self):
-
         distro = self.distribution_version
 
         class VersionedSyncClient(RallySyncElasticsearch):

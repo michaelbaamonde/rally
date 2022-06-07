@@ -1,10 +1,10 @@
 import asyncio
+import contextvars
 import json
 import logging
 import time
-import contextvars
 import warnings
-from typing import List, Optional, Any, Iterable, Mapping
+from typing import Any, Iterable, List, Mapping, Optional
 
 import aiohttp
 import elastic_transport
@@ -12,12 +12,6 @@ import elasticsearch
 from aiohttp import BaseConnector, RequestInfo
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import BaseTimerContext
-from multidict import CIMultiDict, CIMultiDictProxy
-from yarl import URL
-
-from esrally.client_utils import _WARNING_RE, _COMPAT_MIMETYPE_RE, _COMPAT_MIMETYPE_SUB, _COMPAT_MIMETYPE_TEMPLATE, _mimetype_header_to_compat, _quote_query
-from esrally.utils import io, versions
-
 from elastic_transport import (
     ApiResponse,
     BinaryApiResponse,
@@ -34,6 +28,18 @@ from elasticsearch.exceptions import (
     ElasticsearchWarning,
     UnsupportedProductError,
 )
+from multidict import CIMultiDict, CIMultiDictProxy
+from yarl import URL
+
+from esrally.client_utils import (
+    _COMPAT_MIMETYPE_RE,
+    _COMPAT_MIMETYPE_SUB,
+    _COMPAT_MIMETYPE_TEMPLATE,
+    _WARNING_RE,
+    _mimetype_header_to_compat,
+    _quote_query,
+)
+from esrally.utils import io, versions
 
 
 class RequestContextManager:
@@ -71,7 +77,6 @@ class RequestContextManager:
             self.ctx_holder.update_request_end(request_end)
         self.token = None
         return False
-
 
 
 class RequestContextHolder:
@@ -118,6 +123,7 @@ class RequestContextHolder:
     def return_raw_response(cls):
         ctx = cls.request_context.get()
         ctx["raw_response"] = True
+
 
 class StaticTransport:
     def __init__(self):
