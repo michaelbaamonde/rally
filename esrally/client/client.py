@@ -147,57 +147,72 @@ class EsClientFactory:
         except KeyError:
             return False
 
-    def create(self):
+    def create(self, use_latest_client=False):
         # pylint: disable=import-outside-toplevel
-        from esrally.client.synchronous import RallySyncElasticsearch
+        if not use_latest_client:
+            from esrally.client.synchronous import RallySyncElasticsearch
+            return RallySyncElasticsearch(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
+        else:
+            from esrally.client.synchronous import RallySyncElasticsearch8
+            return RallySyncElasticsearch8(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
 
-        return RallySyncElasticsearch(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
-
-    def create_async(self):
+    def create_async(self, use_latest_client=False):
         # pylint: disable=import-outside-toplevel
+        import aiohttp
         import io
 
-        import aiohttp
-        from elasticsearch.serializer import JSONSerializer
+        if use_latest_client:
+            from elasticsearch8.serializer import JSONSerializer
+            from esrally.client.asynchronous import RallyAsyncElasticsearch8
+            client_class = RallyAsyncElasticsearch8
+        else:
+            from elasticsearch.serializer import JSONSerializer
+            from esrally.client.asynchronous import (
+                AIOHttpConnection,
+                RallyAsyncElasticsearch,
+                VerifiedAsyncTransport,
+            )
 
-        from esrally.client.asynchronous import (
-            AIOHttpConnection,
-            RallyAsyncElasticsearch,
-            VerifiedAsyncTransport,
-        )
+            client_class = RallyAsyncElasticsearch
+            transport_class = VerifiedAsyncTransport
+            connection_class = AIOHttpConnection
 
-        class LazyJSONSerializer(JSONSerializer):
-            def loads(self, s):
-                meta = RallyAsyncElasticsearch.request_context.get()
-                if "raw_response" in meta:
-                    return io.BytesIO(s)
-                else:
-                    return super().loads(s)
+        def add_custom_serializer():
+            class LazyJSONSerializer(JSONSerializer):
+                def loads(self, s):
+                    meta = client_class.request_context.get()
+                    if "raw_response" in meta:
+                        return io.BytesIO(s)
+                    else:
+                        return super().loads(s)
+            self.client_options["serializer"] = LazyJSONSerializer()
 
-        async def on_request_start(session, trace_config_ctx, params):
-            RallyAsyncElasticsearch.on_request_start()
+        def add_custom_trace_config():
+            async def on_request_start(session, trace_config_ctx, params):
+                client_class.on_request_start()
 
-        async def on_request_end(session, trace_config_ctx, params):
-            RallyAsyncElasticsearch.on_request_end()
+            async def on_request_end(session, trace_config_ctx, params):
+                client_class.on_request_end()
 
-        trace_config = aiohttp.TraceConfig()
-        trace_config.on_request_start.append(on_request_start)
-        trace_config.on_request_end.append(on_request_end)
-        # ensure that we also stop the timer when a request "ends" with an exception (e.g. a timeout)
-        trace_config.on_request_exception.append(on_request_end)
+            trace_config = aiohttp.TraceConfig()
+            trace_config.on_request_start.append(on_request_start)
+            trace_config.on_request_end.append(on_request_end)
+            # ensure that we also stop the timer when a request "ends" with an exception (e.g. a timeout)
+            trace_config.on_request_exception.append(on_request_end)
+            self.client_options["trace_config"] = trace_config
 
-        # override the builtin JSON serializer
-        self.client_options["serializer"] = LazyJSONSerializer()
-        self.client_options["trace_config"] = trace_config
+        def update_client_options():
+            add_custom_serializer()
+            add_custom_trace_config()
+            return self.client_options
 
-        return RallyAsyncElasticsearch(
+        return client_class(
             hosts=self.hosts,
-            transport_class=VerifiedAsyncTransport,
-            connection_class=AIOHttpConnection,
+            transport_class=transport_class,
+            connection_class=connection_class,
             ssl_context=self.ssl_context,
-            **self.client_options,
+            **update_client_options()
         )
-
 
 def wait_for_rest_layer(es, max_attempts=40):
     """

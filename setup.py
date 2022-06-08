@@ -51,6 +51,8 @@ install_requires = [
     #   urllib3: MIT
     #   aiohttp: Apache 2.0
     "elasticsearch[async]==7.14.0",
+    "elasticsearch8[async]==8.2.0",
+    "elastic-transport==8.1.2",
     "urllib3==1.26.9",
     # License: BSD
     "psutil==5.8.0",

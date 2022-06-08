@@ -21,7 +21,9 @@ import logging
 from typing import List, Optional
 
 import aiohttp
+import elastic_transport
 import elasticsearch
+import elasticsearch8
 from aiohttp import BaseConnector, RequestInfo
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import BaseTimerContext
@@ -277,3 +279,89 @@ class RallyAsyncElasticsearch(elasticsearch.AsyncElasticsearch, RequestContextHo
     def perform_request(self, *args, **kwargs):
         kwargs["url"] = kwargs.pop("path")
         return self.transport.perform_request(*args, **kwargs)
+
+class RallyAsyncElasticsearch8(elasticsearch8.AsyncElasticsearch, RequestContextHolder):
+    pass
+
+def create_es8(hosts=None, client_opts=None, trace_config=None, ssl_context=None):
+    class RallyAiohttpHttpNode(elastic_transport.AiohttpHttpNode):
+        def __init__(self, config):
+            super().__init__(config)
+
+            self._loop = None
+
+            client_options = config._extras.get("_rally_client_options")
+            if client_options:
+                self._trace_configs = client_options.get("trace_config")
+                self._enable_cleanup_closed = client_options.get("enable_cleanup_closed")
+
+            static_responses = client_options.get("static_responses")
+            self.use_static_responses = static_responses is not None
+
+            if self.use_static_responses:
+                # read static responses once and reuse them
+                if not StaticRequest.RESPONSES:
+                    with open(io.normalize_path(static_responses)) as f:
+                        StaticRequest.RESPONSES = ResponseMatcher(json.load(f))
+
+                self._request_class = StaticRequest
+                self._response_class = StaticResponse
+            else:
+                self._request_class = aiohttp.ClientRequest
+                self._response_class = RawClientResponse
+
+        def _create_aiohttp_session(self):
+            if self._loop is None:
+                self._loop = asyncio.get_running_loop()
+
+            if self.use_static_responses:
+                connector = StaticConnector(limit_per_host=self._connections_per_node, enable_cleanup_closed=self._enable_cleanup_closed)
+            else:
+                connector = aiohttp.TCPConnector(
+                    limit_per_host=self._connections_per_node,
+                    use_dns_cache=True,
+                    ssl=self._ssl_context,
+                    enable_cleanup_closed=self._enable_cleanup_closed,
+                )
+
+            self.session = aiohttp.ClientSession(
+                headers=self.headers,
+                auto_decompress=True,
+                loop=self._loop,
+                cookie_jar=aiohttp.DummyCookieJar(),
+                request_class=self._request_class,
+                response_class=self._response_class,
+                connector=connector,
+                trace_configs=self._trace_configs,
+            )
+
+    class RallyAsyncTransport(elastic_transport.AsyncTransport):
+        def __init__(self, *args, **kwargs):
+            # We need to pass a trace config to the session that's created in
+            # async_connection.RallyAiohttphttpnode, which is a subclass of
+            # elastic_transport.AiohttpHttpNode.
+            #
+            # Its constructor only accepts an elastic_transport.NodeConfig object.
+            # Because we do not fully control creation of these objects , we need to
+            # pass the trace_config by adding it to the NodeConfig's `extras`, which
+            # can contain arbitrary metadata.
+            client_opts.update({"trace_config": [trace_config]})
+            node_configs = args[0]
+            for conf in node_configs:
+                extras = conf._extras
+                extras.update({"_rally_client_options": client_opts})
+                conf._extras = extras
+            original_args = args
+            new_args = (node_configs, *original_args[1:])
+
+            super().__init__(*new_args, node_class=RallyAiohttpHttpNode, **kwargs)
+
+    # max_connections and trace_config are not valid kwargs, so we pop them
+    max = client_opts.pop("max_connections")
+    client_opts.pop("trace_config")
+
+    return RallyAsyncElasticsearch8(hosts=hosts,
+                                    transport_class=RallyAsyncTransport,
+                                    ssl_context=ssl_context,
+                                    maxsize=max,
+                                    client_options=client_opts,)
