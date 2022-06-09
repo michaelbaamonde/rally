@@ -16,4 +16,4 @@
 # under the License.
 
 from .context import RequestContextHolder, RequestContextManager
-from .factory import EsClientFactory, wait_for_rest_layer
+from .factory import EsClientFactory, create_api_key, wait_for_rest_layer

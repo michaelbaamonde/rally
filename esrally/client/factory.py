@@ -153,7 +153,7 @@ class EsClientFactory:
 
         return RallySyncElasticsearch(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
 
-    def create_async(self):
+    def create_async(self, api_key=None):
         # pylint: disable=import-outside-toplevel
         import io
 
@@ -190,14 +190,17 @@ class EsClientFactory:
         self.client_options["serializer"] = LazyJSONSerializer()
         self.client_options["trace_config"] = trace_config
 
+        if api_key is not None:
+            self.client_options.pop("http_auth")
+
         return RallyAsyncElasticsearch(
             hosts=self.hosts,
             transport_class=VerifiedAsyncTransport,
             connection_class=AIOHttpConnection,
+            api_key=api_key,
             ssl_context=self.ssl_context,
             **self.client_options,
         )
-
 
 def wait_for_rest_layer(es, max_attempts=40):
     """
@@ -238,3 +241,16 @@ def wait_for_rest_layer(es, max_attempts=40):
                 logger.warning("Got unexpected status code [%s] on attempt [%s].", e.status_code, attempt)
                 raise e
     return False
+
+def create_api_key(es, client_id, max_attempts=5):
+    logger = logging.getLogger(__name__)
+
+    for attempt in range(max_attempts):
+        # pylint: disable=import-outside-toplevel
+        import elasticsearch
+        try:
+            api_key = es.security.create_api_key({"name": f"rally-client-{client_id}"})
+            return api_key
+        except elasticsearch.TransportError as e:
+            logger.debug(f"Got status code {e.status_code} on attempt {attempt} of {max_attempts}. Retrying...")
+            time.sleep(1)

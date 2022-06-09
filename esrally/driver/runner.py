@@ -197,6 +197,7 @@ class Runner:
             "request_timeout": "request-timeout",
         }
         full_result = {k: params.get(v) for (k, v) in kw_dict.items()}
+
         # filter Nones
         return dict(filter(lambda kv: kv[1] is not None, full_result.items()))
 
