@@ -68,7 +68,7 @@ def create_track(cfg):
 
     client = EsClientFactory(
         hosts=target_hosts.all_hosts[opts.TargetHosts.DEFAULT], client_options=client_options.all_client_options[opts.TargetHosts.DEFAULT]
-    ).create()
+    ).create_sync()
 
     info = client.info()
     console.info(f"Connected to Elasticsearch cluster [{info['name']}] version [{info['version']['number']}].\n", logger=logger)

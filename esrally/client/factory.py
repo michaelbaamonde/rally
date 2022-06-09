@@ -147,7 +147,7 @@ class EsClientFactory:
         except KeyError:
             return False
 
-    def create(self):
+    def create_sync(self):
         # pylint: disable=import-outside-toplevel
         from esrally.client.synchronous import RallySyncElasticsearch
 

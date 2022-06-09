@@ -176,7 +176,7 @@ class TestCluster:
         cmd = 'start --runtime-jdk="bundled" --installation-id={} --race-id={}'.format(self.installation_id, race_id)
         if esrally(self.cfg, cmd) != 0:
             raise AssertionError("Failed to start Elasticsearch test cluster.")
-        es = client.EsClientFactory(hosts=[{"host": "127.0.0.1", "port": self.http_port}], client_options={}).create()
+        es = client.EsClientFactory(hosts=[{"host": "127.0.0.1", "port": self.http_port}], client_options={}).create_sync()
         client.wait_for_rest_layer(es)
 
     def stop(self):

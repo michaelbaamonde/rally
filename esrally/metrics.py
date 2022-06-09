@@ -206,7 +206,7 @@ class EsClientFactory:
             client_options["basic_auth_password"] = password
 
         factory = client.EsClientFactory(hosts=[{"host": host, "port": port}], client_options=client_options)
-        self._client = factory.create()
+        self._client = factory.create_sync()
 
     def create(self):
         c = EsClient(self._client)

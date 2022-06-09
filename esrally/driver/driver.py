@@ -139,7 +139,7 @@ class StartWorker:
     Starts a worker.
     """
 
-    def __init__(self, worker_id, config, track, client_allocations):
+    def __init__(self, worker_id, config, track, client_allocations, client_ids):
         """
         :param worker_id: Unique (numeric) id of the worker.
         :param config: Rally internal configuration object.
@@ -150,6 +150,7 @@ class StartWorker:
         self.config = config
         self.track = track
         self.client_allocations = client_allocations
+        self.client_ids = client_ids
 
 
 class Drive:
@@ -305,8 +306,8 @@ class DriverActor(actor.RallyActor):
         self.send(worker, Bootstrap(cfg))
         return worker
 
-    def start_worker(self, driver, worker_id, cfg, track, allocations):
-        self.send(driver, StartWorker(worker_id, cfg, track, allocations))
+    def start_worker(self, driver, worker_id, cfg, track, allocations, client_ids):
+        self.send(driver, StartWorker(worker_id, cfg, track, allocations, client_ids))
 
     def drive_at(self, driver, client_start_timestamp):
         self.send(driver, Drive(client_start_timestamp))
@@ -578,7 +579,7 @@ class Driver:
 
         self.telemetry = None
 
-    def create_es_clients(self):
+    def create_sync_es_clients(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
         es = {}
         for cluster_name, cluster_hosts in all_hosts.items():
@@ -586,7 +587,7 @@ class Driver:
             cluster_client_options = dict(all_client_options[cluster_name])
             # Use retries to avoid aborts on long living connections for telemetry devices
             cluster_client_options["retry-on-timeout"] = True
-            es[cluster_name] = self.es_client_factory(cluster_hosts, cluster_client_options).create()
+            es[cluster_name] = self.es_client_factory(cluster_hosts, cluster_client_options).create_sync()
         return es
 
     def prepare_telemetry(self, es, enable, index_names, data_stream_names):
@@ -646,7 +647,7 @@ class Driver:
             self.metrics_store, downsample_factor, self.track.meta_data, self.challenge.meta_data
         )
 
-        es_clients = self.create_es_clients()
+        es_clients = self.create_sync_es_clients()
 
         skip_rest_api_check = self.config.opts("mechanic", "skip.rest.api.check")
         uses_static_responses = self.config.opts("client", "options").uses_static_responses
@@ -708,12 +709,13 @@ class Driver:
                 if len(clients) > 0:
                     self.logger.info("Allocating worker [%d] on [%s] with [%d] clients.", worker_id, host, len(clients))
                     worker = self.target.create_client(host, self.config)
-
+                    client_ids = []
                     client_allocations = ClientAllocations()
                     for client_id in clients:
                         client_allocations.add(client_id, self.allocations[client_id])
                         self.clients_per_worker[client_id] = worker_id
-                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations)
+                        client_ids.append(client_id)
+                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations, client_ids)
                     self.workers.append(worker)
                     worker_id += 1
 
@@ -1096,6 +1098,16 @@ class ClientAllocations:
                 current_tasks.append(ClientAllocation(allocation["client_id"], tasks_at_index))
         return current_tasks
 
+def create_es_per_client(config, client_ids):
+    def es_client(all_hosts, all_client_options, client_id):
+        es = {}
+        for cluster_name, cluster_hosts in all_hosts.items():
+            es[cluster_name] = client.EsClientFactory(cluster_hosts, all_client_options[cluster_name]).create_async()
+        return es
+
+    hosts = config.opts("client", "hosts").all_hosts
+    opts = config.opts("client", "options")
+    return {client: es_client(hosts, opts, client) for client in client_ids}
 
 class Worker(actor.RallyActor):
     """
@@ -1138,6 +1150,7 @@ class Worker(actor.RallyActor):
         self.logger.info("Worker[%d] is about to start.", msg.worker_id)
         self.master = sender
         self.worker_id = msg.worker_id
+        self.client_ids = msg.client_ids
         self.config = load_local_config(msg.config)
         self.on_error = self.config.opts("driver", "on.error")
         self.sample_queue_size = int(self.config.opts("reporting", "sample.queue.size", mandatory=False, default_value=1 << 20))
@@ -1152,6 +1165,8 @@ class Worker(actor.RallyActor):
         runner.register_default_runners()
         if self.track.has_plugins:
             track.load_track_plugins(self.config, self.track.name, runner.register_runner, scheduler.register_scheduler)
+        self.es_clients = create_es_per_client(self.config, self.client_ids)
+        print(f"worker: {self.worker_id}, clients: {self.client_ids}, es_clients: {self.es_clients}")
         self.drive()
 
     @actor.no_retry("worker")  # pylint: disable=no-value-for-parameter

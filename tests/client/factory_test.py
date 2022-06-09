@@ -364,7 +364,7 @@ class TestEsClientAgainstHTTPSServer:
                 "ca_certs": ca_cert_path,
             }
             f = client.EsClientFactory(hosts, client_options)
-            es = f.create()
+            es = f.create_sync()
             assert es.info() == {"version": {"number": "8.0.0"}}
 
     def test_client_cert(self, tmp_path_factory: pytest.TempPathFactory):
@@ -388,7 +388,7 @@ class TestEsClientAgainstHTTPSServer:
                 "client_key": client_key_path,
             }
             f = client.EsClientFactory(hosts, client_options)
-            es = f.create()
+            es = f.create_sync()
             assert es.info() == {"version": {"number": "8.0.0"}}
 
 
