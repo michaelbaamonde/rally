@@ -153,7 +153,7 @@ class EsClientFactory:
 
         return RallySyncElasticsearch(hosts=self.hosts, ssl_context=self.ssl_context, **self.client_options)
 
-    def create_async(self):
+    def create_async(self, api_key=None):
         # pylint: disable=import-outside-toplevel
         import io
 
@@ -189,6 +189,10 @@ class EsClientFactory:
         # override the builtin JSON serializer
         self.client_options["serializer"] = LazyJSONSerializer()
         self.client_options["trace_config"] = trace_config
+
+        if api_key is not None:
+            self.client_options.pop("http_auth")
+            self.client_options["api_key"] = api_key
 
         return RallyAsyncElasticsearch(
             hosts=self.hosts,

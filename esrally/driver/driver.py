@@ -1656,10 +1656,10 @@ class AsyncIoAdapter:
         self.logger.error("Uncaught exception in event loop: %s", context)
 
     async def run(self):
-        def es_clients(all_hosts, all_client_options):
+        def es_clients(all_hosts, all_client_options, api_key="LOL"):
             es = {}
             for cluster_name, cluster_hosts in all_hosts.items():
-                es[cluster_name] = client.EsClientFactory(cluster_hosts, all_client_options[cluster_name]).create_async()
+                es[cluster_name] = client.EsClientFactory(cluster_hosts, all_client_options[cluster_name]).create_async(api_key=api_key)
             return es
 
         self.logger.info("Task assertions enabled: %s", str(self.assertions_enabled))
