@@ -43,9 +43,11 @@ from esrally import (
     telemetry,
     track,
 )
+from esrally.client import delete_api_keys
 from esrally.driver import runner, scheduler
 from esrally.track import TrackProcessorRegistry, load_track, load_track_plugins
 from esrally.utils import console, convert, net
+
 
 
 ##################################
@@ -307,7 +309,7 @@ class DriverActor(actor.RallyActor):
         self.send(worker, Bootstrap(cfg))
         return worker
 
-    def start_worker(self, driver, worker_id, cfg, track, allocations, client_contexts={}):
+    def start_worker(self, driver, worker_id, cfg, track, allocations, client_contexts=None):
         self.send(driver, StartWorker(worker_id, cfg, track, allocations, client_contexts))
 
     def drive_at(self, driver, client_start_timestamp):
@@ -555,6 +557,7 @@ class Driver:
         self.target = target
         self.config = config
         self.es_client_factory = es_client_factory_class
+        self.default_sync_es_client = None
         self.track = None
         self.challenge = None
         self.metrics_store = None
@@ -563,6 +566,7 @@ class Driver:
         # which client ids are assigned to which workers?
         self.clients_per_worker = {}
         self.client_contexts = {}
+        self.generated_api_keys = []
 
         self.progress_reporter = console.progress()
         self.progress_counter = 0
@@ -639,9 +643,11 @@ class Driver:
             return None
 
     def create_api_key(self, es, client_id):
-        self.logger.info(f"Creating ES API key for client {client_id}.")
-        api_key = client.create_api_key(es["default"], client_id)
-        self.logger.info(f"ES API key created for client {client_id}.")
+        self.logger.info("Creating ES API key for client [%s].", client_id)
+        api_key = client.create_api_key(es, client_id)
+        self.logger.info("ES API key created for client [%s].", client_id)
+        # Store the API key ID for deletion upon benchmak completion
+        self.generated_api_keys.append(api_key["id"])
         return api_key
 
     def prepare_benchmark(self, t):
@@ -656,6 +662,7 @@ class Driver:
         )
 
         es_clients = self.create_es_clients()
+        self.default_sync_es_client = es_clients["default"]
 
         skip_rest_api_check = self.config.opts("mechanic", "skip.rest.api.check")
         uses_static_responses = self.config.opts("client", "options").uses_static_responses
@@ -690,7 +697,6 @@ class Driver:
 
         self.target.prepare_track([h["host"] for h in self.load_driver_hosts], self.config, self.track)
 
-
     def start_benchmark(self):
         self.logger.info("Benchmark is about to start.")
         # ensure relative time starts when the benchmark starts.
@@ -709,10 +715,7 @@ class Driver:
         if allocator.clients < 128:
             self.logger.info("Allocation matrix:\n%s", "\n".join([str(a) for a in self.allocations]))
 
-
         create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("create_api_key_per_client", None)
-        if create_api_keys:
-            es_clients = self.create_es_clients()
 
         worker_assignments = calculate_worker_assignments(self.load_driver_hosts, allocator.clients)
         worker_id = 0
@@ -732,10 +735,12 @@ class Driver:
                         self.clients_per_worker[client_id] = worker_id
                         # API key stuff
                         if create_api_keys:
-                            api_key = self.create_api_key(es_clients, client_id)
-                            worker_client_contexts[client_id] = {"api_key": api_key["encoded"]}
+                            api_key = self.create_api_key(self.default_sync_es_client, client_id)
+                            worker_client_contexts[client_id] = {"api_key": (api_key["id"], api_key["api_key"])}
                             self.client_contexts[worker_id] = worker_client_contexts
-                    self.target.start_worker(worker, worker_id, self.config, self.track, client_allocations, worker_client_contexts)
+                    self.target.start_worker(
+                        worker, worker_id, self.config, self.track, client_allocations, client_contexts=worker_client_contexts
+                    )
                     self.workers.append(worker)
                     worker_id += 1
 
@@ -776,6 +781,9 @@ class Driver:
                 self.metrics_store.close()
                 # immediately clear as we don't need it anymore and it can consume a significant amount of memory
                 self.metrics_store = None
+                if self.generated_api_keys:
+                    self.logger.debug("Deleting auto-generated client API keys...")
+                    delete_api_keys(self.default_sync_es_client, self.generated_api_keys)
                 self.logger.debug("Sending benchmark results...")
                 self.target.on_benchmark_complete(m)
             else:
@@ -1682,10 +1690,10 @@ class AsyncIoAdapter:
         self.logger.error("Uncaught exception in event loop: %s", context)
 
     async def run(self):
-        def es_clients(all_hosts, all_client_options, api_key="LOL"):
+        def es_clients(client_id, all_hosts, all_client_options):
             es = {}
             context = self.client_contexts.get(client_id)
-            api_key = context.get('api_key', None)
+            api_key = context.get("api_key", None)
             for cluster_name, cluster_hosts in all_hosts.items():
                 es[cluster_name] = client.EsClientFactory(cluster_hosts, all_client_options[cluster_name]).create_async(api_key=api_key)
             return es
@@ -1703,8 +1711,7 @@ class AsyncIoAdapter:
                 param_source = track.operation_parameters(self.track, task)
                 params_per_task[task] = param_source
             schedule = schedule_for(task_allocation, params_per_task[task])
-
-            es = es_clients(self.cfg.opts("client", "hosts").all_hosts, self.cfg.opts("client", "options"))
+            es = es_clients(client_id, self.cfg.opts("client", "hosts").all_hosts, self.cfg.opts("client", "options"))
             clients.append(es)
             async_executor = AsyncExecutor(
                 client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error)
@@ -1781,7 +1788,6 @@ class AsyncExecutor:
         self.complete = complete
         self.on_error = on_error
         self.logger = logging.getLogger(__name__)
-
 
     async def __call__(self, *args, **kwargs):
         any_task_completes_parent = self.task.any_completes_parent

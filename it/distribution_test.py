@@ -137,6 +137,7 @@ def test_eventdata_daily_volume(cfg, test_cluster):
     track_params = "bulk_indexing_clients:1,number_of_replicas:0,daily_logging_volume:1MB"
     execute_eventdata(cfg, test_cluster, challenges, track_params)
 
+
 @it.random_rally_config
 def test_create_api_key_per_client(cfg):
     port = 19200
@@ -150,6 +151,7 @@ def test_create_api_key_per_client(cfg):
         )
         == 0
     )
+
 
 def execute_eventdata(cfg, test_cluster, challenges, track_params):
     for challenge in challenges:

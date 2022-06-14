@@ -198,10 +198,10 @@ class EsClientFactory:
             hosts=self.hosts,
             transport_class=VerifiedAsyncTransport,
             connection_class=AIOHttpConnection,
-            api_key=api_key,
             ssl_context=self.ssl_context,
             **self.client_options,
         )
+
 
 def wait_for_rest_layer(es, max_attempts=40):
     """
@@ -243,15 +243,33 @@ def wait_for_rest_layer(es, max_attempts=40):
                 raise e
     return False
 
+
 def create_api_key(es, client_id, max_attempts=5):
     logger = logging.getLogger(__name__)
 
     for attempt in range(max_attempts):
         # pylint: disable=import-outside-toplevel
         import elasticsearch
+
         try:
+            # api_key = es.security.create_api_key({"name": f"rally-client-{client_id}", "expiration": "1s"})
+            # time.sleep(1)
             api_key = es.security.create_api_key({"name": f"rally-client-{client_id}"})
             return api_key
         except elasticsearch.TransportError as e:
-            logger.debug(f"Got status code {e.status_code} on attempt {attempt} of {max_attempts}. Retrying...")
+            logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
+            time.sleep(1)
+
+def delete_api_keys(es, ids, max_attempts=5):
+    logger = logging.getLogger(__name__)
+
+    for attempt in range(max_attempts):
+        # pylint: disable=import-outside-toplevel
+        import elasticsearch
+
+        try:
+            es.security.invalidate_api_key({"ids": ids})
+            return
+        except elasticsearch.TransportError as e:
+            logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
             time.sleep(1)
