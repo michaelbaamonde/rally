@@ -716,7 +716,6 @@ class Driver:
             self.logger.info("Allocation matrix:\n%s", "\n".join([str(a) for a in self.allocations]))
 
         create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("create_api_key_per_client", None)
-
         worker_assignments = calculate_worker_assignments(self.load_driver_hosts, allocator.clients)
         worker_id = 0
         for assignment in worker_assignments:
@@ -730,10 +729,9 @@ class Driver:
                     client_allocations = ClientAllocations()
                     worker_client_contexts = {}
                     for client_id in clients:
-                        # Bookkeeping
                         client_allocations.add(client_id, self.allocations[client_id])
                         self.clients_per_worker[client_id] = worker_id
-                        # API key stuff
+
                         if create_api_keys:
                             api_key = self.create_api_key(self.default_sync_es_client, client_id)
                             worker_client_contexts[client_id] = {"api_key": (api_key["id"], api_key["api_key"])}
@@ -1667,7 +1665,6 @@ class AsyncIoAdapter:
         self.profiling_enabled = self.cfg.opts("driver", "profiling")
         self.assertions_enabled = self.cfg.opts("driver", "assertions")
         self.debug_event_loop = self.cfg.opts("system", "async.debug", mandatory=False, default_value=False)
-        self.es_clients = None
         self.logger = logging.getLogger(__name__)
 
     def __call__(self, *args, **kwargs):
