@@ -192,6 +192,7 @@ class EsClientFactory:
 
         if api_key is not None:
             self.client_options.pop("http_auth")
+            self.client_options["api_key"] = api_key
 
         return RallyAsyncElasticsearch(
             hosts=self.hosts,

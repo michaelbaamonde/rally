@@ -1678,8 +1678,11 @@ class AsyncIoAdapter:
         finally:
             loop.close()
 
-    def create_es_per_client(self):
-        def es_client(all_hosts, all_client_options, client_id):
+    def _logging_exception_handler(self, loop, context):
+        self.logger.error("Uncaught exception in event loop: %s", context)
+
+    async def run(self):
+        def es_clients(all_hosts, all_client_options, api_key="LOL"):
             es = {}
             context = self.client_contexts.get(client_id)
             api_key = context.get('api_key', None)
@@ -1687,20 +1690,10 @@ class AsyncIoAdapter:
                 es[cluster_name] = client.EsClientFactory(cluster_hosts, all_client_options[cluster_name]).create_async(api_key=api_key)
             return es
 
-        hosts = self.cfg.opts("client", "hosts").all_hosts
-        opts = self.cfg.opts("client", "options")
-        self.es_clients = {client: es_client(hosts, opts, client) for client in self.client_contexts.keys()}
-
-    def _logging_exception_handler(self, loop, context):
-        self.logger.error("Uncaught exception in event loop: %s", context)
-
-    async def run(self):
         self.logger.info("Task assertions enabled: %s", str(self.assertions_enabled))
         runner.enable_assertions(self.assertions_enabled)
 
-        if self.es_clients is None:
-            self.create_es_per_client()
-
+        clients = []
         aws = []
         # A parameter source should only be created once per task - it is partitioned later on per client.
         params_per_task = {}
@@ -1710,7 +1703,9 @@ class AsyncIoAdapter:
                 param_source = track.operation_parameters(self.track, task)
                 params_per_task[task] = param_source
             schedule = schedule_for(task_allocation, params_per_task[task])
-            es = self.es_clients[client_id]
+
+            es = es_clients(self.cfg.opts("client", "hosts").all_hosts, self.cfg.opts("client", "options"))
+            clients.append(es)
             async_executor = AsyncExecutor(
                 client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error)
             )
@@ -1725,10 +1720,11 @@ class AsyncIoAdapter:
             await asyncio.get_event_loop().shutdown_asyncgens()
             shutdown_asyncgens_end = time.perf_counter()
             self.logger.info("Total time to shutdown asyncgens: %f seconds.", (shutdown_asyncgens_end - run_end))
-            for e in es.values():
-                await e.transport.close()
+            for c in clients:
+                for es in c.values():
+                    await es.close()
             transport_close_end = time.perf_counter()
-            self.logger.info("Total time to close transports: %f seconds.", (shutdown_asyncgens_end - transport_close_end))
+            self.logger.info("Total time to close transports: %f seconds.", (transport_close_end - shutdown_asyncgens_end))
 
 
 class AsyncProfiler:
