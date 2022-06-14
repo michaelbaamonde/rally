@@ -785,11 +785,10 @@ class Driver:
                     except exceptions.RallyError as e:
                         console.warn(
                             (
-                                f"Unable to delete auto-generated API keys. You may need to manually delete them. "
-                                f"Please check the logs for details."
+                                "Unable to delete auto-generated API keys. You may need to manually delete them. "
+                                "Please check the logs for details."
                             )
                         )
-                        self.logger.warning(e.message, exc_info=True)
                 self.logger.debug("Sending benchmark results...")
                 self.target.on_benchmark_complete(m)
             else:

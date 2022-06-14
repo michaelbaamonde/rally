@@ -20,6 +20,7 @@ import contextlib
 import logging
 import os
 import random
+import re
 import ssl
 from copy import deepcopy
 from unittest import mock
@@ -330,8 +331,8 @@ class TestEsClientFactory:
         api_key = ("id", "secret")
 
         f = client.EsClientFactory(hosts, client_options)
-        c = f.create_async(api_key=api_key)
 
+        assert f.create_async(api_key=api_key)
         assert "http_auth" not in f.client_options
         assert f.client_options["api_key"] == api_key
         assert client_options == original_client_options
@@ -498,13 +499,25 @@ class TestApiKeys:
 
     @mock.patch("elasticsearch.Elasticsearch")
     def test_successfully_deletes_api_keys(self, es):
-        ids = range(5)
+        ids = [i for i in range(10)]
         assert client.delete_api_keys(es, ids, max_attempts=3)
         es.security.invalidate_api_key.assert_has_calls(
             [
                 mock.call({"ids": ids}),
             ]
         )
+
+    @mock.patch("elasticsearch.Elasticsearch")
+    def test_logs_when_api_key_deletion_fails(self, es):
+        ids = [i for i in range(10)]
+        es.security.invalidate_api_key.side_effect = [
+            elasticsearch.TransportError(503, "Service Unavailable"),
+            elasticsearch.TransportError(401, "Unauthorized"),
+            elasticsearch.TransportError(408, "Timed Out"),
+        ]
+
+        with pytest.raises(exceptions.RallyError, match=re.escape(f"Could not delete API keys with the following IDs: {ids}")):
+            client.delete_api_keys(es, ids)
 
 
 class TestAsyncConnection:
