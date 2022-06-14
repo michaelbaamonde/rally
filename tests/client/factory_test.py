@@ -53,7 +53,6 @@ class TestEsClientFactory:
 
         assert client_options == original_client_options
 
-
     @mock.patch.object(ssl.SSLContext, "load_cert_chain")
     def test_create_https_connection_verify_server(self, mocked_load_cert_chain):
         hosts = [{"host": "localhost", "port": 9200}]
@@ -337,14 +336,16 @@ class TestEsClientFactory:
         assert f.client_options["api_key"] == api_key
         assert client_options == original_client_options
 
-        es.assert_called_once_with(hosts=[{"host": "localhost", "port": 9200}],
-                                   transport_class=VerifiedAsyncTransport,
-                                   connection_class=AIOHttpConnection,
-                                   ssl_context=f.ssl_context,
-                                   scheme="https",
-                                   serializer=f.client_options["serializer"],
-                                   trace_config=f.client_options["trace_config"],
-                                   api_key=api_key,)
+        es.assert_called_once_with(
+            hosts=[{"host": "localhost", "port": 9200}],
+            transport_class=VerifiedAsyncTransport,
+            connection_class=AIOHttpConnection,
+            ssl_context=f.ssl_context,
+            scheme="https",
+            serializer=f.client_options["serializer"],
+            trace_config=f.client_options["trace_config"],
+            api_key=api_key,
+        )
 
 
 @contextlib.contextmanager
@@ -482,6 +483,7 @@ class TestRestLayer:
         )
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
+
 
 class TestApiKeys:
     @mock.patch("elasticsearch.Elasticsearch")
