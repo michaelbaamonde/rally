@@ -31,7 +31,7 @@ import urllib3.exceptions
 from pytest_httpserver import HTTPServer
 
 from esrally import client, doc_link, exceptions
-from esrally.client.asynchronous import AIOHttpConnection
+from esrally.client.asynchronous import AIOHttpConnection, VerifiedAsyncTransport
 from esrally.utils import console
 
 
@@ -52,6 +52,7 @@ class TestEsClientFactory:
         assert "http_auth" not in f.client_options
 
         assert client_options == original_client_options
+
 
     @mock.patch.object(ssl.SSLContext, "load_cert_chain")
     def test_create_https_connection_verify_server(self, mocked_load_cert_chain):
@@ -317,6 +318,34 @@ class TestEsClientFactory:
         assert f.ssl_context.check_hostname is False
         assert f.ssl_context.verify_mode == ssl.CERT_REQUIRED
 
+    @mock.patch("esrally.client.asynchronous.RallyAsyncElasticsearch")
+    def test_create_async_client_with_api_key_auth_override(self, es):
+        hosts = [{"host": "localhost", "port": 9200}]
+        client_options = {
+            "use_ssl": True,
+            "verify_certs": True,
+            "http_auth": ("user", "password"),
+        }
+        # make a copy so we can verify later that the factory modified it correctly
+        original_client_options = deepcopy(client_options)
+        api_key = "baz"
+
+        f = client.EsClientFactory(hosts, client_options)
+        c = f.create_async(api_key=api_key)
+
+        assert "http_auth" not in f.client_options
+        assert f.client_options["api_key"] == api_key
+        assert client_options == original_client_options
+
+        es.assert_called_once_with(hosts=[{"host": "localhost", "port": 9200}],
+                                   transport_class=VerifiedAsyncTransport,
+                                   connection_class=AIOHttpConnection,
+                                   ssl_context=f.ssl_context,
+                                   scheme="https",
+                                   serializer=f.client_options["serializer"],
+                                   trace_config=f.client_options["trace_config"],
+                                   api_key=api_key,)
+
 
 @contextlib.contextmanager
 def _build_server(tmpdir, host):
@@ -453,6 +482,26 @@ class TestRestLayer:
         )
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
+
+    @mock.patch("elasticsearch.Elasticsearch")
+    def test_successfully_creates_api_keys(self, es):
+        client_id = 0
+        assert client.create_api_key(es, client_id, max_attempts=3)
+        es.security.create_api_key.assert_has_calls(
+            [
+                mock.call({"name": f"rally-client-{client_id}"}),
+            ]
+        )
+
+    @mock.patch("elasticsearch.Elasticsearch")
+    def test_successfully_deletes_api_keys(self, es):
+        ids = range(5)
+        assert client.delete_api_keys(es, ids, max_attempts=3)
+        es.security.invalidate_api_key.assert_has_calls(
+            [
+                mock.call({"ids": ids}),
+            ]
+        )
 
 
 class TestAsyncConnection:
