@@ -247,7 +247,7 @@ def wait_for_rest_layer(es, max_attempts=40):
 def create_api_key(es, client_id, max_attempts=5):
     logger = logging.getLogger(__name__)
 
-    for attempt in range(max_attempts):
+    for attempt in range(1, max_attempts + 1):
         # pylint: disable=import-outside-toplevel
         import elasticsearch
 
@@ -263,14 +263,22 @@ def create_api_key(es, client_id, max_attempts=5):
 
 def delete_api_keys(es, ids, max_attempts=5):
     logger = logging.getLogger(__name__)
-
-    for attempt in range(max_attempts):
+    for attempt in range(max_attempts + 1):
         # pylint: disable=import-outside-toplevel
         import elasticsearch
 
         try:
             es.security.invalidate_api_key({"ids": ids})
-            return
+            return True
         except elasticsearch.TransportError as e:
-            logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
-            time.sleep(1)
+            if attempt < max_attempts:
+                logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
+                time.sleep(1)
+            else:
+                raise exceptions.RallyError("Could not delete API keys.") from e
+        except BaseException as e:
+            if attempt < max_attempts:
+                logger.debug("Got error on attempt [%s] of [%s]. Sleeping...", attempt, max_attempts)
+                time.sleep(1)
+            else:
+                raise exceptions.RallyError("Could not delete API keys.") from e

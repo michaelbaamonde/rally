@@ -326,9 +326,9 @@ class TestEsClientFactory:
             "verify_certs": True,
             "http_auth": ("user", "password"),
         }
-        # make a copy so we can verify later that the factory modified it correctly
+        # make a copy so we can verify later that the factory did not modify it
         original_client_options = deepcopy(client_options)
-        api_key = "baz"
+        api_key = ("id", "secret")
 
         f = client.EsClientFactory(hosts, client_options)
         c = f.create_async(api_key=api_key)
@@ -483,6 +483,7 @@ class TestRestLayer:
         with pytest.raises(exceptions.SystemSetupError, match="Could not connect to cluster via https. Is this an https endpoint?"):
             client.wait_for_rest_layer(es, max_attempts=3)
 
+class TestApiKeys:
     @mock.patch("elasticsearch.Elasticsearch")
     def test_successfully_creates_api_keys(self, es):
         client_id = 0

@@ -780,7 +780,11 @@ class Driver:
                 self.metrics_store = None
                 if self.generated_api_keys:
                     self.logger.debug("Deleting auto-generated client API keys...")
-                    delete_api_keys(self.default_sync_es_client, self.generated_api_keys)
+                    try:
+                        delete_api_keys(self.default_sync_es_client, self.generated_api_keys)
+                    except exceptions.RallyError as e:
+                        self.logger.exception(e.message)
+
                 self.logger.debug("Sending benchmark results...")
                 self.target.on_benchmark_complete(m)
             else:
