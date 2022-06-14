@@ -275,10 +275,10 @@ def delete_api_keys(es, ids, max_attempts=5):
                 logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
                 time.sleep(1)
             else:
-                raise exceptions.RallyError("Could not delete API keys.") from e
+                raise exceptions.RallyError(f"Could not delete API keys with the following IDs: {ids}") from e
         except BaseException as e:
             if attempt < max_attempts:
                 logger.debug("Got error on attempt [%s] of [%s]. Sleeping...", attempt, max_attempts)
                 time.sleep(1)
             else:
-                raise exceptions.RallyError("Could not delete API keys.") from e
+                raise exceptions.RallyError(f"Could not delete API keys with the following IDs: {ids}") from e
