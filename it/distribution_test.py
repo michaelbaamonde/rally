@@ -142,12 +142,14 @@ def test_eventdata_daily_volume(cfg, test_cluster):
 def test_create_api_key_per_client(cfg):
     port = 19200
     it.wait_until_port_is_free(port_number=port)
+    dist = it.DISTRIBUTIONS[-1]
+    opts = "use_ssl:true,verify_certs:false,basic_auth_user:'rally',basic_auth_password:'rally-password',create_api_key_per_client:true"
     assert (
         it.race(
             cfg,
-            f'--distribution-version="7.17.0" --track="geonames" '
+            f'--distribution-version={dist} --track="geonames" '
             f"--test-mode --car=4gheap,trial-license,x-pack-security --target-hosts=127.0.0.1:{port} "
-            f"--client-options=use_ssl:true,verify_certs:false,basic_auth_user:'rally',basic_auth_password:'rally-password',create_api_key_per_client:true",
+            f"--client-options={opts}",
         )
         == 0
     )
