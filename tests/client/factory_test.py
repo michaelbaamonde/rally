@@ -497,9 +497,22 @@ class TestApiKeys:
             ]
         )
 
+    @mock.patch("time.sleep")
+    @mock.patch("elasticsearch.Elasticsearch")
+    def test_retries_api_key_creation_on_transport_errors(self, es, sleep):
+        client_id = 0
+        es.cluster.health.side_effect = [
+            elasticsearch.TransportError(503, "Service Unavailable"),
+            elasticsearch.TransportError(401, "Unauthorized"),
+            elasticsearch.TransportError(408, "Timed Out"),
+            elasticsearch.TransportError(408, "Timed Out"),
+            {"id": "abc", "name": f"rally-client-{client_id}", "api_key": "123"},
+        ]
+        assert client.create_api_key(es, client_id, max_attempts=5)
+
     @mock.patch("elasticsearch.Elasticsearch")
     def test_successfully_deletes_api_keys(self, es):
-        ids = [i for i in range(10)]
+        ids = ["foo", "bar", "baz"]
         assert client.delete_api_keys(es, ids, max_attempts=3)
         es.security.invalidate_api_key.assert_has_calls(
             [
@@ -507,13 +520,26 @@ class TestApiKeys:
             ]
         )
 
+    @mock.patch("time.sleep")
     @mock.patch("elasticsearch.Elasticsearch")
-    def test_logs_when_api_key_deletion_fails(self, es):
-        ids = [i for i in range(10)]
-        es.security.invalidate_api_key.side_effect = [
+    def test_retries_api_key_deletion_on_transport_errors(self, es, sleep):
+        ids = ["foo", "bar", "baz"]
+        es.cluster.health.side_effect = [
             elasticsearch.TransportError(503, "Service Unavailable"),
             elasticsearch.TransportError(401, "Unauthorized"),
             elasticsearch.TransportError(408, "Timed Out"),
+            elasticsearch.TransportError(408, "Timed Out"),
+            {"invalidated_api_keys": ["foo", "bar", "baz"]},
+        ]
+        assert client.delete_api_keys(es, ids, max_attempts=5)
+
+    @mock.patch("elasticsearch.Elasticsearch")
+    def test_raises_exception_when_api_key_deletion_fails(self, es):
+        ids = ["foo", "bar", "baz"]
+        es.security.invalidate_api_key.side_effect = [
+            elasticsearch.TransportError(503, "Service Unavailable"),
+            elasticsearch.TransportError(401, "Unauthorized"),
+            BaseException("Whoops!"),
         ]
 
         with pytest.raises(exceptions.RallyError, match=re.escape(f"Could not delete API keys with the following IDs: {ids}")):

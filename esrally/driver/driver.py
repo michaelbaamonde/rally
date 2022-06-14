@@ -782,7 +782,7 @@ class Driver:
                     self.logger.debug("Deleting auto-generated client API keys...")
                     try:
                         delete_api_keys(self.default_sync_es_client, self.generated_api_keys)
-                    except exceptions.RallyError as e:
+                    except exceptions.RallyError:
                         console.warn(
                             (
                                 "Unable to delete auto-generated API keys. You may need to manually delete them. "
