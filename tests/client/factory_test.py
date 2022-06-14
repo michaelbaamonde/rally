@@ -338,7 +338,7 @@ class TestEsClientFactory:
         assert client_options == original_client_options
 
         es.assert_called_once_with(
-            hosts=[{"host": "localhost", "port": 9200}],
+            hosts=hosts,
             transport_class=VerifiedAsyncTransport,
             connection_class=AIOHttpConnection,
             ssl_context=f.ssl_context,

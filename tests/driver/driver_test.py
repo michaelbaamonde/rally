@@ -140,6 +140,34 @@ class TestDriver:
         # Did we start all load generators? There is no specific mock assert for this...
         assert target.start_worker.call_count == 4
 
+
+    def test_start_benchmark_and_prepare_track_with_api_keys(self):
+        client_opts = {"use_ssl": True,
+                       "verify_certs": False,
+                       "basic_auth_user": "rally",
+                       "basic_auth_password": "rally-password",
+                       "create_api_key_per_client": True,}
+        self.cfg.add(config.Scope.application, "client", "options", self.Holder(all_client_options={"default": client_opts}))
+
+        target = self.create_test_driver_target()
+        d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d.prepare_benchmark(t=self.track)
+        d.start_benchmark()
+        assert d.client_contexts is "foo"
+
+        # target.start_worker.assert_has_calls(
+        #     calls=[
+        #         mock.call(, d.config),
+        #         mock.call(, d.config),
+        #         mock.call(, d.config),
+        #         mock.call(, d.config),
+        #     ]
+        # )
+
+        # Did we start all load generators? There is no specific mock assert for this...
+        assert target.start_worker.call_count == 4
+
+
     def test_assign_drivers_round_robin(self):
         target = self.create_test_driver_target()
         d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
@@ -1817,6 +1845,9 @@ class TestAsyncExecutor:
         assert exc.value.args[0] == (
             "Cannot execute [failing_mock_runner]. Provided parameters are: ['bulk', 'mode']. Error: ['bulk-size missing']."
         )
+
+    # @pytest.mark.asyncio
+    # async def test_
 
 
 class TestAsyncProfiler:
