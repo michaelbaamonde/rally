@@ -49,7 +49,6 @@ from esrally.track import TrackProcessorRegistry, load_track, load_track_plugins
 from esrally.utils import console, convert, net
 
 
-
 ##################################
 #
 # Messages sent between drivers

@@ -260,6 +260,7 @@ def create_api_key(es, client_id, max_attempts=5):
             logger.debug("Got status code [%s] on attempt [%s] of [%s]. Sleeping...", e.status_code, attempt, max_attempts)
             time.sleep(1)
 
+
 def delete_api_keys(es, ids, max_attempts=5):
     logger = logging.getLogger(__name__)
 
