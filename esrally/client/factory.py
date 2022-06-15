@@ -252,8 +252,6 @@ def create_api_key(es, client_id, max_attempts=5):
         import elasticsearch
 
         try:
-            # api_key = es.security.create_api_key({"name": f"rally-client-{client_id}", "expiration": "1s"})
-            # time.sleep(1)
             api_key = es.security.create_api_key({"name": f"rally-client-{client_id}"})
             return api_key
         except elasticsearch.TransportError as e:
