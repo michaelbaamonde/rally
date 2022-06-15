@@ -272,6 +272,7 @@ class TestDriver:
 
         # Don't attempt to mutate the metrics store on benchmark completion
         d.metrics_store = mock.Mock()
+
         # Complete the benchmark
         d.joinpoint_reached(
             worker_id=0, worker_local_timestamp=10, task_allocations=[driver.ClientAllocation(client_id=0, task=driver.JoinPoint(id=1))]
@@ -1864,9 +1865,6 @@ class TestAsyncExecutor:
             "Cannot execute [failing_mock_runner]. Provided parameters are: ['bulk', 'mode']. Error: ['bulk-size missing']."
         )
 
-    # @pytest.mark.asyncio
-    # async def test_
-
 
 class TestAsyncProfiler:
     @pytest.mark.asyncio
@@ -1883,10 +1881,3 @@ class TestAsyncProfiler:
         assert return_value == 2
         duration = end - start
         assert 0.9 <= duration <= 1.2, "Should sleep for roughly 1 second but took [%.2f] seconds." % duration
-
-
-# class TestAsyncIoAdapater:
-#     @pytest.mark.asyncio
-#     @mock.patch("elasticsearch.Elasticsearch")
-#     async def test_creates_async_es_clients(self):
-#         a = driver.AsyncIoAdapter()

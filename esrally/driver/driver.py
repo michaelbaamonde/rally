@@ -642,9 +642,9 @@ class Driver:
             return None
 
     def create_api_key(self, es, client_id):
-        self.logger.info("Creating ES API key for client [%s].", client_id)
+        self.logger.debug("Creating ES API key for client [%s].", client_id)
         api_key = client.create_api_key(es, client_id)
-        self.logger.info("ES API key created for client [%s].", client_id)
+        self.logger.debug("ES API key created for client [%s].", client_id)
         # Store the API key ID for deletion upon benchmak completion
         self.generated_api_key_ids.append(api_key["id"])
         return api_key
@@ -779,7 +779,7 @@ class Driver:
                 # immediately clear as we don't need it anymore and it can consume a significant amount of memory
                 self.metrics_store = None
                 if self.generated_api_key_ids:
-                    self.logger.info("Deleting auto-generated client API keys...")
+                    self.logger.debug("Deleting auto-generated client API keys...")
                     try:
                         delete_api_keys(self.default_sync_es_client, self.generated_api_key_ids)
                     except exceptions.RallyError:
