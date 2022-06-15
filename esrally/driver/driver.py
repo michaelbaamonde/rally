@@ -778,8 +778,8 @@ class Driver:
                 self.metrics_store.close()
                 # immediately clear as we don't need it anymore and it can consume a significant amount of memory
                 self.metrics_store = None
-                if self.generated_api_keys:
-                    self.logger.debug("Deleting auto-generated client API keys...")
+                if self.generated_api_key_ids:
+                    self.logger.info("Deleting auto-generated client API keys...")
                     try:
                         delete_api_keys(self.default_sync_es_client, self.generated_api_key_ids)
                     except exceptions.RallyError:
