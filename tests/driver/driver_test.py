@@ -146,46 +146,6 @@ class TestDriver:
         # Did we start all load generators? There is no specific mock assert for this...
         assert target.start_worker.call_count == 4
 
-    @mock.patch("esrally.driver.driver.delete_api_keys")
-    def test_creates_api_keys_on_start_and_deletes_on_end(self, delete):
-        client_opts = {
-            "create_api_key_per_client": True,
-        }
-        self.cfg.add(config.Scope.application, "client", "options", self.Holder(all_client_options={"default": client_opts}))
-        target = self.create_test_driver_target()
-        d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
-        d.prepare_benchmark(t=self.track)
-        d.start_benchmark()
-
-        # Did the driver generate and keep track of each worker's client API keys?
-        expected_client_contexts = {
-            0: {0: {"api_key": ("abc", "123")}},
-            1: {1: {"api_key": ("def", "456")}},
-            2: {2: {"api_key": ("ghi", "789")}},
-            3: {3: {"api_key": ("jkl", "012")}},
-        }
-        assert d.client_contexts == expected_client_contexts
-        assert d.generated_api_key_ids == ["abc", "def", "ghi", "jkl"]
-
-        # Were workers started with the correct client API keys?
-        expected_context_kwargs = [ctx for _, ctx in expected_client_contexts.items()]
-        actual_context_kwargs = [kwargs["client_contexts"] for _, kwargs in target.start_worker.call_args_list]
-        assert target.start_worker.call_count == 4
-        assert expected_context_kwargs == actual_context_kwargs
-
-        # Set up some state so that one call to joinpoint_reached() will consider the benchmark done
-        d.currently_completed = 3
-        d.current_step = 0
-
-        # Don't attempt to mutate the metrics store on benchmark completion
-        d.metrics_store = mock.Mock()
-        # Complete the benchmark
-        d.joinpoint_reached(
-            worker_id=0, worker_local_timestamp=10, task_allocations=[driver.ClientAllocation(client_id=0, task=driver.JoinPoint(id=1))]
-        )
-        # Were the right API keys deleted?
-        delete.assert_called_once_with(d.default_sync_es_client, d.generated_api_key_ids)
-
     def test_assign_drivers_round_robin(self):
         target = self.create_test_driver_target()
         d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
@@ -278,6 +238,46 @@ class TestDriver:
         # target.on_task_finished.assert_called_once()
         assert target.on_task_finished.call_count == 1
         assert target.drive_at.call_count == 4
+
+    @mock.patch("esrally.driver.driver.delete_api_keys")
+    def test_creates_api_keys_on_start_and_deletes_on_end(self, delete):
+        client_opts = {
+            "create_api_key_per_client": True,
+        }
+        self.cfg.add(config.Scope.application, "client", "options", self.Holder(all_client_options={"default": client_opts}))
+        target = self.create_test_driver_target()
+        d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d.prepare_benchmark(t=self.track)
+        d.start_benchmark()
+
+        # Did the driver generate and keep track of each worker's client API keys?
+        expected_client_contexts = {
+            0: {0: {"api_key": ("abc", "123")}},
+            1: {1: {"api_key": ("def", "456")}},
+            2: {2: {"api_key": ("ghi", "789")}},
+            3: {3: {"api_key": ("jkl", "012")}},
+        }
+        assert d.client_contexts == expected_client_contexts
+        assert d.generated_api_key_ids == ["abc", "def", "ghi", "jkl"]
+
+        # Were workers started with the correct client API keys?
+        expected_context_kwargs = [ctx for _, ctx in expected_client_contexts.items()]
+        actual_context_kwargs = [kwargs["client_contexts"] for _, kwargs in target.start_worker.call_args_list]
+        assert target.start_worker.call_count == 4
+        assert expected_context_kwargs == actual_context_kwargs
+
+        # Set up some state so that one call to joinpoint_reached() will consider the benchmark done
+        d.currently_completed = 3
+        d.current_step = 0
+
+        # Don't attempt to mutate the metrics store on benchmark completion
+        d.metrics_store = mock.Mock()
+        # Complete the benchmark
+        d.joinpoint_reached(
+            worker_id=0, worker_local_timestamp=10, task_allocations=[driver.ClientAllocation(client_id=0, task=driver.JoinPoint(id=1))]
+        )
+        # Were the right API keys deleted?
+        delete.assert_called_once_with(d.default_sync_es_client, d.generated_api_key_ids)
 
 
 def op(name, operation_type):
