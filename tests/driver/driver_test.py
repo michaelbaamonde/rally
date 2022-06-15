@@ -72,6 +72,12 @@ class TestDriver:
             self.es = TestDriver.StaticClientFactory.PATCHER.start()
             self.es.indices.stats.return_value = {"mocked": True}
             self.es.cat.master.return_value = {"mocked": True}
+            self.es.security.create_api_key.side_effect = [
+                {"id": "abc", "api_key": "123"},
+                {"id": "def", "api_key": "456"},
+                {"id": "ghi", "api_key": "789"},
+                {"id": "jkl", "api_key": "012"},
+            ]
 
         def create(self):
             return self.es
@@ -140,33 +146,29 @@ class TestDriver:
         # Did we start all load generators? There is no specific mock assert for this...
         assert target.start_worker.call_count == 4
 
-
-    def test_start_benchmark_and_prepare_track_with_api_keys(self):
-        client_opts = {"use_ssl": True,
-                       "verify_certs": False,
-                       "basic_auth_user": "rally",
-                       "basic_auth_password": "rally-password",
-                       "create_api_key_per_client": True,}
+    def test_start_benchmark_with_api_keys(self):
+        client_opts = {"create_api_key_per_client": True,}
         self.cfg.add(config.Scope.application, "client", "options", self.Holder(all_client_options={"default": client_opts}))
-
         target = self.create_test_driver_target()
         d = driver.Driver(target, self.cfg, es_client_factory_class=self.StaticClientFactory)
         d.prepare_benchmark(t=self.track)
         d.start_benchmark()
-        assert d.client_contexts is "foo"
 
-        # target.start_worker.assert_has_calls(
-        #     calls=[
-        #         mock.call(, d.config),
-        #         mock.call(, d.config),
-        #         mock.call(, d.config),
-        #         mock.call(, d.config),
-        #     ]
-        # )
+        # Did the driver generate and keep track of each worker's client API keys?
+        expected_client_contexts = {0: {0: {'api_key': ('abc', '123')}},
+                                    1: {1: {'api_key': ('def', '456')}},
+                                    2: {2: {'api_key': ('ghi', '789')}},
+                                    3: {3: {'api_key': ('jkl', '012')}}}
+        assert d.client_contexts == expected_client_contexts
+        assert d.generated_api_key_ids == ["abc", "def", "ghi", "jkl"]
 
-        # Did we start all load generators? There is no specific mock assert for this...
+        # Were workers started with the correct client API keys?
+        expected_context_kwargs = [ctx for _, ctx in expected_client_contexts.items()]
+        actual_context_kwargs = [kwargs["client_contexts"] for _, kwargs in target.start_worker.call_args_list]
         assert target.start_worker.call_count == 4
+        assert expected_context_kwargs == actual_context_kwargs
 
+        #
 
     def test_assign_drivers_round_robin(self):
         target = self.create_test_driver_target()

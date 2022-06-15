@@ -565,7 +565,7 @@ class Driver:
         # which client ids are assigned to which workers?
         self.clients_per_worker = {}
         self.client_contexts = {}
-        self.generated_api_keys = []
+        self.generated_api_key_ids = []
 
         self.progress_reporter = console.progress()
         self.progress_counter = 0
@@ -646,7 +646,7 @@ class Driver:
         api_key = client.create_api_key(es, client_id)
         self.logger.info("ES API key created for client [%s].", client_id)
         # Store the API key ID for deletion upon benchmak completion
-        self.generated_api_keys.append(api_key["id"])
+        self.generated_api_key_ids.append(api_key["id"])
         return api_key
 
     def prepare_benchmark(self, t):
@@ -781,7 +781,7 @@ class Driver:
                 if self.generated_api_keys:
                     self.logger.debug("Deleting auto-generated client API keys...")
                     try:
-                        delete_api_keys(self.default_sync_es_client, self.generated_api_keys)
+                        delete_api_keys(self.default_sync_es_client, self.generated_api_key_ids)
                     except exceptions.RallyError:
                         console.warn(
                             (
