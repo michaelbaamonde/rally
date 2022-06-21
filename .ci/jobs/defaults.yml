@@ -8,7 +8,9 @@
 ##### JOB DEFAULTS
 
 - job:
-    vault: []
+    vault:
+      url: https://secrets.elastic.co:8200
+      role_name: elasticsearch-ci
     node: "rally"
     concurrent: true
     logrotate:
