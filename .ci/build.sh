@@ -91,6 +91,7 @@ function precommit {
 
   make install
   make precommit
+  make unit-tests
 }
 
 function it {
@@ -98,7 +99,7 @@ function it {
   install_python_prereq
 
   make install
-  make it
+  make integration-tests
 }
 
 function license-scan {
