@@ -9,8 +9,8 @@
 
 - job:
     vault:
-      url: https://secrets.elastic.co:8200
-      role_name: elasticsearch-ci
+      url: "https://secrets.elastic.co:8200"
+      role_name: "elasticsearch-ci"
     node: "rally"
     concurrent: true
     logrotate:
