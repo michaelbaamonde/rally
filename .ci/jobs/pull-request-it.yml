@@ -25,3 +25,4 @@
           #!/usr/local/bin/runbld
           set -o errexit
           bash .ci/build.sh it
+          bash .ci/build.sh archive

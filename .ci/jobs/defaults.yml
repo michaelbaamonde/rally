@@ -64,11 +64,6 @@
             JAVA17_HOME=$HOME/.java/openjdk17
             ES_JAVA_HOME=$JAVA17_HOME
             RALLY_HOME=$WORKSPACE
-      - shell: |
-          #!/usr/local/bin/runbld
-          set -o errexit
-          bash .ci/build.sh build
-          bash .ci/build.sh archive
     publishers:
       - email:
           recipients: infra-root+build@elastic.co
