@@ -25,4 +25,3 @@
           #!/usr/local/bin/runbld
           set -o errexit
           bash .ci/build.sh precommit
-          bash .ci/build.sh archive
