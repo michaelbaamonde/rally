@@ -1,7 +1,7 @@
 ---
 
 - job:
-    name: "elastic+rally+{branch}"
+    name: "elastic+rally+push+{branch}"
     display-name: "elastic / rally # {branch} - push"
     description: "CI testing for rally"
     project-type: multijob
