@@ -66,15 +66,12 @@ function install_python_prereq
   retry 5 make prereq
 }
 
-function thespian_log_settings {
+function python_common {
   export THESPLOG_FILE="${THESPLOG_FILE:-${RALLY_HOME}/.rally/logs/actor-system-internal.log}"
   # this value is in bytes, the default is 50kB. We increase it to 200kiB.
   export THESPLOG_FILE_MAXSIZE=${THESPLOG_FILE_MAXSIZE:-204800}
   # adjust the default log level from WARNING
   export THESPLOG_THRESHOLD="INFO"
-}
-
-function python_common {
   # turn nounset off because some of the following commands fail if nounset is turned on
   set +u
 
@@ -89,7 +86,6 @@ function python_common {
 }
 
 function precommit {
-  thespian_log_settings
   install_python_prereq
   python_common
 
@@ -98,7 +94,6 @@ function precommit {
 }
 
 function it {
-  thespian_log_settings
   install_python_prereq
   python_common
 

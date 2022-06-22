@@ -8,9 +8,9 @@
 ##### JOB DEFAULTS
 
 - job:
-    vault:
-      url: "https://secrets.elastic.co:8200"
-      role_name: "elasticsearch-ci"
+    vault: []
+      # url: "https://secrets.elastic.co:8200"
+      # role_name: "elasticsearch-ci"
     node: "rally"
     concurrent: true
     logrotate:
@@ -30,7 +30,7 @@
           reference-repo: "/var/lib/jenkins/.git-references/rally.git"
           branches:
             - "${branch_specifier}"
-          url: "https://github.com/elastic/rally.git"
+          url: "https://github.com/michaelbaamonde/rally.git"
           basedir: ""
           wipe-workspace: true
     triggers: []
@@ -43,7 +43,7 @@
       - timestamps
     properties:
       - github:
-          url: https://github.com/elastic/rally/
+          url: https://github.com/michaelbaamonde/rally/
       - inject:
           properties-content: |
             HOME=$JENKINS_HOME
