@@ -44,9 +44,6 @@
     properties:
       - github:
           url: https://github.com/michaelbaamonde/rally/
-      # - inject:
-      #     properties-content: |
-      #       HOME=$JENKINS_HOME
     publishers:
       - email:
           recipients: infra-root+build@elastic.co
