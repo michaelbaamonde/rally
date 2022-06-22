@@ -4,6 +4,9 @@
     name: "elastic+rally+{branch}+periodic"
     display-name: "elastic / rally # {branch} - periodic"
     description: "CI testing for rally"
+    project-type: multijob
+    concurrent: true
+    node: master
     triggers:
       - timed: "H H * * *"
     parameters:
