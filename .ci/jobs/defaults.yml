@@ -44,13 +44,14 @@
     properties:
       - github:
           url: https://github.com/michaelbaamonde/rally/
-      - inject:
-          properties-content: |
-            HOME=$JENKINS_HOME
+      # - inject:
+      #     properties-content: |
+      #       HOME=$JENKINS_HOME
     publishers:
       - email:
           recipients: infra-root+build@elastic.co
       - junit:
+          allow-empty-results: true
           results: 'junit-py*.xml'
           keep-long-stdio: true
       - google-cloud-storage:

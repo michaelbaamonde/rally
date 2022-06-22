@@ -2,4 +2,4 @@
 
 jjbb-template: periodic.yml
 vars:
-  - branch: master
+  - branch: ci-jobs-split
