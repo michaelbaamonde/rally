@@ -86,16 +86,16 @@ function python_common {
 }
 
 function precommit {
-  install_python_prereq
   python_common
+  install_python_prereq
 
   make install
   make precommit
 }
 
 function it {
-  install_python_prereq
   python_common
+  install_python_prereq
 
   make install
   make it
