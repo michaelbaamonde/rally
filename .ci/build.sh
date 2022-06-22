@@ -95,7 +95,6 @@ function precommit {
 
   make install
   make precommit
-  make it
 }
 
 function it {
@@ -104,16 +103,6 @@ function it {
   python_common
 
   make install
-  make it
-}
-
-function build {
-  thespian_log_settings
-  install_python_prereq
-  python_common
-
-  make install
-  make precommit
   make it
 }
 
