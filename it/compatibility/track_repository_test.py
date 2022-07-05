@@ -20,6 +20,6 @@ from pytest_esrally import esrally_commands as rally
 
 
 class TestTrackRepository:
-    def test_track_challenge(self, es_cluster, race, track, challenge):
-        ret = race(track, challenge)
+    def test_track_challenge(self, es_cluster, race, track, challenge, race_kwargs):
+        ret = race(track, challenge, **race_kwargs)
         assert ret == 0
