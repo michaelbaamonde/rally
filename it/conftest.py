@@ -18,7 +18,7 @@
 import os
 
 import pytest
-from pytest_esrally.utils import RALLY_CONF_DIR
+from pytest_rally.rally import RALLY_CONFIG_DIR
 
 
 def pytest_addoption(parser):
@@ -26,7 +26,7 @@ def pytest_addoption(parser):
     group.addoption(
         "--track-repository",
         action="store",
-        default=os.path.join(RALLY_CONF_DIR, "benchmarks", "tracks", "default"),
+        default=os.path.join(RALLY_CONFIG_DIR, "benchmarks", "tracks", "default"),
         help="Path to a local track repository",
     )
     group.addoption("--track-revision", action="store", default="master", help="Track repository revision to test")
