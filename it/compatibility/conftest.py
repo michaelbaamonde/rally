@@ -30,3 +30,17 @@ def pytest_addoption(parser):
         help="Path to a local track repository",
     )
     group.addoption("--track-revision", action="store", default="master", help="Track repository revision to test")
+    group.addoption(
+        "--track-test-directory",
+        action="store",
+        dest="track_test_dir",
+        default="it",
+        help=("Name of the directory containing the track repo's integration tests" "(default: `it`)"),
+    )
+
+
+def pytest_cmdline_main(config):
+    if hasattr(config, "args"):
+        repo = config.option.track_repository
+        if repo not in config.args:
+            config.args.append(f"{repo}/{config.option.track_test_dir}")
