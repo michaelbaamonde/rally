@@ -105,6 +105,7 @@ develop_require = [
     "isort==5.8.0",
     "trustme==0.9.0",
     "pytest-httpserver==1.0.4",
+    "pytest-rally @ git+https://github.com/elastic/pytest-rally@main#egg=pytest-rally",
 ]
 
 python_version_classifiers = ["Programming Language :: Python :: {}.{}".format(major, minor) for major, minor in supported_python_versions]
