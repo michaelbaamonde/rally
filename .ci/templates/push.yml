@@ -19,4 +19,5 @@
           name: all CI tests
           projects:
             - name: elastic+rally+push+{branch}-precommit
-            - name: elastic+rally+push+{branch}-it
+            - name: elastic+rally+push+{branch}-it38
+            - name: elastic+rally+push+{branch}-it310

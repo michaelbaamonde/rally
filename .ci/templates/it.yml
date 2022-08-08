@@ -1,9 +1,9 @@
 ---
 
 - job:
-    name: "elastic+rally+{jobname}+{branch}-it"
-    display-name: "elastic / rally # {branch} - {jobname}+it"
-    description: "Integration tests for elastic/rally "
+    name: "elastic+rally+{jobname}+{branch}-it-python-{py_version}"
+    display-name: "elastic / rally # {branch} - {jobname}+it-{py_version}"
+    description: "Integration tests for elastic/rally (Python {py_version})"
     concurrent: true
     scm:
       - git:
@@ -12,5 +12,5 @@
       - shell: |
           #!/usr/local/bin/runbld
           set -o errexit
-          bash .ci/build.sh it
+          bash .ci/build.sh it{py_version}
           bash .ci/build.sh archive

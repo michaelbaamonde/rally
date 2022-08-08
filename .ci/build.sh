@@ -85,19 +85,26 @@ function python_common {
   eval "$(pyenv virtualenv-init -)"
 }
 
-function precommit {
+function install {
   python_common
   install_python_prereq
   make install
+}
+
+function precommit {
+  install
   make precommit
   make unit
 }
 
-function it {
-  python_common
-  install_python_prereq
-  make install
-  make it
+function it38 {
+  install
+  make it38
+}
+
+function it310 {
+  install
+  make it310
 }
 
 function license-scan {
