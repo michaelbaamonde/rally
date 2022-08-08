@@ -19,5 +19,5 @@
           name: all CI tests
           projects:
             - name: elastic+rally+periodic+{branch}-precommit
-            - name: elastic+rally+periodic+{branch}-it38
-            - name: elastic+rally+periodic+{branch}-it310
+            - name: elastic+rally+periodic+{branch}-it-python38
+            - name: elastic+rally+periodic+{branch}-it-python310

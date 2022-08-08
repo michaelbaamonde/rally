@@ -1,8 +1,8 @@
 ---
 
 - job:
-    name: "elastic+rally+{jobname}+{branch}-it-python-{py_version}"
-    display-name: "elastic / rally # {branch} - {jobname}+it-{py_version}"
+    name: "elastic+rally+{jobname}+{branch}-it-python{py_version}"
+    display-name: "elastic / rally # {branch} - {jobname}+it-python{py_version}"
     description: "Integration tests for elastic/rally (Python {py_version})"
     concurrent: true
     scm:

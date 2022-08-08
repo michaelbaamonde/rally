@@ -2,6 +2,6 @@
 
 jjbb-template: it.yml
 vars:
-  - jobname: periodic
+  - jobname: push
   - branch: ci-jobs-split
   - py_version: "38"
