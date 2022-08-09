@@ -5,7 +5,7 @@
 - meta:
     cluster: elasticsearch-ci
 
-##### JOB DEFAULTS
+##### JOB DEFAULTS test
 
 - job:
     vault:
