@@ -88,7 +88,6 @@ function python_common {
 function install {
   python_common
   install_python_prereq
-  make install
 }
 
 function precommit {
