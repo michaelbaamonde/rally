@@ -2,4 +2,4 @@
 
 jjbb-template: push.yml
 vars:
-  - branch: ci-jobs-split
+  - branch: master

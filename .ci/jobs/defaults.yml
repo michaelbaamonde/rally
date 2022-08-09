@@ -9,8 +9,8 @@
 
 - job:
     vault: []
-      # url: "https://secrets.elastic.co:8200"
-      # role_name: "elasticsearch-ci"
+      url: "https://secrets.elastic.co:8200"
+      role_name: "elasticsearch-ci"
     node: "rally"
     concurrent: true
     logrotate:
@@ -20,7 +20,7 @@
     parameters:
       - string:
           name: branch_specifier
-          default: "refs/heads/ci-jobs-split"
+          default: "refs/heads/master"
           description: "the Git branch specifier to build (&lt;branchName&gt;, &lt;tagName&gt;, &lt;commitId&gt;, etc.)\n"
     scm:
       - git:
@@ -30,7 +30,7 @@
           reference-repo: "/var/lib/jenkins/.git-references/rally.git"
           branches:
             - "${branch_specifier}"
-          url: "https://github.com/michaelbaamonde/rally.git"
+          url: "https://github.com/elastic/rally.git"
           basedir: ""
           wipe-workspace: true
     triggers: []
@@ -43,7 +43,7 @@
       - timestamps
     properties:
       - github:
-          url: https://github.com/michaelbaamonde/rally/
+          url: https://github.com/elastic/rally/
     publishers:
       - email:
           recipients: infra-root+build@elastic.co
