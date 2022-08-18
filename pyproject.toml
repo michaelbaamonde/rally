@@ -5,8 +5,6 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "esrally/_version.py"
 
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [project]
 name = "esrally"
