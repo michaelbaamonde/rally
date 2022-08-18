@@ -2,8 +2,8 @@
 
 - job:
     name: "elastic+rally+pull-request+rally-tracks-it"
-    display-name: "elastic / rally # rally-tracks-it"
-    description: "rally-tracks integration tests using rally PR"
+    display-name: "elastic / rally # pull-request+rally-tracks-it"
+    description: "rally-tracks integration tests using rally built from PR branch"
     scm:
       - git:
           refspec: "+refs/pull/*:refs/remotes/origin/pr/* +refs/heads/*:refs/remotes/origin/*"

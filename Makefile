@@ -131,7 +131,7 @@ it310: check-venv python-caches-clean tox-env-clean
 	. $(VENV_ACTIVATE_FILE); tox -e py310-it
 
 rally-tracks-it: check-venv python-caches-clean tox-env-clean
-	. $(VENV_ACTIVATE_FILE); tox -e py38-rally-tracks-it
+	. $(VENV_ACTIVATE_FILE); tox -e rally-tracks-it
 
 check-all: lint test it
 
