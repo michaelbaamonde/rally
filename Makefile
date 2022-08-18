@@ -67,6 +67,8 @@ install-user: venv-create
 install: install-user
 	# Also install development dependencies
 	. $(VENV_ACTIVATE_FILE); $(PIP_WRAPPER) install -e .[develop]
+	. $(VENV_ACTIVATE_FILE); $(PIP_WRAPPER) install git+https://github.com/elastic/pytest-rally.git
+
 
 clean: nondocs-clean docs-clean
 
@@ -127,6 +129,9 @@ it39: check-venv python-caches-clean tox-env-clean
 
 it310: check-venv python-caches-clean tox-env-clean
 	. $(VENV_ACTIVATE_FILE); tox -e py310-it
+
+rally-tracks-it: check-venv python-caches-clean tox-env-clean
+	. $(VENV_ACTIVATE_FILE); tox -e py38-rally-tracks-it
 
 check-all: lint test it
 
