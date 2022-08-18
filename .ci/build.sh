@@ -17,6 +17,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+#
 # fail this script immediately if any command fails with a non-zero exit code
 set -e
 # fail on pipeline errors, e.g. when grepping
