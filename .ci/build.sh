@@ -127,6 +127,11 @@ function it310 {
   make it310
 }
 
+function rally-tracks-it {
+  install
+  make rally-tracks-it
+}
+
 function license-scan {
   # turn nounset off because some of the following commands fail if nounset is turned on
   set +u
