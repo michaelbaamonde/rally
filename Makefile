@@ -69,6 +69,7 @@ install: install-user
 	. $(VENV_ACTIVATE_FILE); $(PIP_WRAPPER) install -e .[develop]
 	. $(VENV_ACTIVATE_FILE); $(PIP_WRAPPER) install git+https://github.com/elastic/pytest-rally.git
 
+#
 
 clean: nondocs-clean docs-clean
 
